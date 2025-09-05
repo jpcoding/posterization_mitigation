@@ -124,12 +124,16 @@ int main(int argc, char** argv)
                                                             dec_data[global_idx]));
             }
         }
+        std::cout<<"failed here \n";
         auto compensator = PM::Compensation<Real, int>(2, slice_dims.data(),
-                    slice_dec_data[thread_id].data(), slice_quant_inds[thread_id].data(), slice_max_diff*compensation_factor);
+                    slice_dec_data[thread_id].data(), slice_quant_inds[thread_id].data(), 
+                    slice_max_diff*compensation_factor);
 
+        std::cout<<"failed here \n";
         auto compensation_map = compensator.get_compensation_map_2d(distance_map_1_1[i], 
                                                                 distance_map_1_2[i],
                                                                 sign_map_1[i]);
+        std::cout<<"compensation map size = "<<compensation_map.size()<<std::endl;
                                                                 
         for(int j = 0; j < dims[1]; j++)
         {

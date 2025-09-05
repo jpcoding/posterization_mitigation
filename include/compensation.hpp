@@ -13,6 +13,7 @@
 #include "edt_transform_omp.hpp"
 #include "get_boundary.hpp"
 #include "utils/file_utils.hpp"
+#include "utils/smooth_distance.hpp"
 #include "utils/timer.hpp"
 
 namespace PM {
@@ -42,6 +43,8 @@ class Compensation {
     void set_edt_thread_num(int num_threads) { this->edt_thread_num = num_threads; }
 
     void set_use_rbf(bool use_rbf) { this->use_rbf = use_rbf; }
+
+    void set_frequent_quant_index(T_quant index) { this->frequent_quant_index = index; }
 
     template <typename T_data_sign>
     char get_sign(T_data_sign data) {
@@ -270,8 +273,15 @@ class Compensation {
         auto sign_map = std::get<1>(bounday_and_sign);
         char edge_tag = 1;
 
-        // write boundary map to file
-        writefile("boundary.int8", boundary_map.data(), input_size);
+        double num_edges = 0;
+        for (size_t i = 0; i < input_size; i++) {
+            if (boundary_map[i] == edge_tag) {
+                num_edges++;
+            }
+        }
+        if (num_edges / input_size < 0.001) {
+            return compensation_map;
+        }
 
         auto timer = Timer();
 
@@ -279,38 +289,24 @@ class Compensation {
         auto edt_omp = PM2::EDT_OMP<T_data, int>();
         edt_omp.set_num_threads(edt_thread_num);
         auto edt_result = edt_omp.NI_EuclideanFeatureTransform(boundary_map.data(), N, dims.data(), edt_thread_num);
-        // auto edt_result = NI_EuclideanFeatureTransform<double, int>(boundary_map.data(), N, dims.data());
-        std::cout << "edt total time = " << timer.stop() << std::endl;
         auto distance_array = std::move(edt_result.distance);
         auto indexes = std::move(edt_result.indexes);
-        // print edt time
-        printf("edt time = %.10f \n", edt_omp.get_edt_time());
-        std::cout << "distance time = " << edt_omp.get_distance_time() << std::endl;
-        
-
-        writefile("distance1.f32", distance_array.get(), input_size);
-        // writefile("sign.int8", sign_map.data(), input_size);
-        // complete the sign map
+#pragma omp parallel for num_threads(edt_thread_num)
         for (size_t i = 0; i < input_size; i++) {
             if (boundary_map[i] != edge_tag)  // non-boundary points ·
             {
                 sign_map[i] = sign_map[indexes[i]];
             }
         }
-
-        // dump the sign map
-        writefile("sign.int8", sign_map.data(), input_size);
-
-        // get the second boundry map
         auto boundary_map2 = get_boundary(sign_map.data(), N, dims.data());
 
+#pragma omp parallel for num_threads(edt_thread_num)
         for (int i = 0; i < input_size; i++) {
             if (boundary_map2[i] == edge_tag && boundary_map[i] == edge_tag) {
                 boundary_map2[i] = 0;  // boundary lable
             }
         }
 
-        writefile("boundary2.int8", boundary_map2.data(), input_size);
 
         auto rbf = [](double r) -> double {
             // return std::exp(-0.3*r);
@@ -331,30 +327,38 @@ class Compensation {
 
         timer.start();
         edt_omp.reset_timer();
-        // auto edt_result2 = NI_EuclideanFeatureTransform<double, int>(boundary_map2.data(), N, dims.data());        //
         auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform(boundary_map2.data(), N, dims.data(), edt_thread_num);
-        std::cout << "edt time = " << timer.stop() << std::endl;
         auto distance_array2 = std::move(edt_result2.distance);
         auto indexes2 = std::move(edt_result2.indexes);
-        // dump the distance array
-        // writefile("distance1.f32", distance_array.data(), input_size);
-        writefile("distance2.f32", distance_array2.get(), input_size);
+
         if (use_rbf == true) {
+            #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
+                double distance1 = distance_array[i] + 0.5;
+                double distance2 = distance_array2[i] + 0.5;
+                char sign = sign_map[i];
                 if (1) {
-                    double distance1 = distance_array[i] + 0.5;
-                    double distance2 = distance_array2[i] + 0.5;
-                    char sign = sign_map[i];
-                    double compensation_value = 0;
+                    // double compensation_value = 0;
                     double d0 = cal_distance(indexes[i], indexes2[i]);
-                    double a = rbf(0.5);
+                    double a = rbf(0);
                     double b = rbf(d0);
-                    double w0 = a / (a * a - b * b) * sign;
-                    double w1 = b / (-a * a + b * b) * sign;
-                    compensation_map[i] = (w0 * rbf(distance1) + w1 * rbf(distance2)) * comepnsation_value;
+                    double w0 = a / (a * a - b * b);
+                    double w1 = b / (-a * a + b * b);
+                    double sx = (w0 * rbf(distance1) + w1 * rbf(distance2));
+                    // clamp sx between [-1 1]
+                    if (sx > 1) {
+                        sx = 1;
+                    } else if (sx < -1) {
+                        sx = -1;
+                    }
+                    compensation_map[i] = comepnsation_value * sx * sign;
+                } else {
+                    double magnitude = (1 / distance1) / (1 / distance1 + 1 / distance2);
+                    compensation_map[i] = sign * magnitude * comepnsation_value;
                 }
             }
         } else {
+            #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 if (1) {
                     double distance1 = distance_array[i] + 0.5;
@@ -367,152 +371,39 @@ class Compensation {
             }
         }
 
-        std::cout << "compensation map size = " << compensation_map.size() << std::endl;
-        return compensation_map;
-    }
-
-    std::vector<T_data> get_compensation_map_2d(std::vector<double> &distance_array,
-                                                std::vector<double> &distance_array2, std::vector<int> &sign_map) {
-        auto boundary_map = get_boundary(quant_index, N, dims.data());
-        // flip the boundary map tag
-        std::vector<bool> boundary_mask(input_size, false);
-        sign_map.resize(input_size, 0);
-        size_t edge_point_count = 0;
-        for (int i = 0; i < input_size; i++) {
-            if (boundary_map[i] == 1) {
-                boundary_map[i] = 0;      // boundary lable
-                boundary_mask[i] = true;  // boundary lable
-                edge_point_count++;
-            } else {
-                boundary_map[i] = 1;
-            }
-        }
-        auto timer = Timer();
-        // std::cout << "edge point count = " << edge_point_count << std::endl;
-        if (edge_point_count == 0) {
-            distance_array.resize(input_size, std::numeric_limits<double>::max());
-            distance_array2.resize(input_size, std::numeric_limits<double>::max());
-
-            return compensation_map;
-        }
-
-        // timer.start();
-        auto edt_omp = PM2::EDT_OMP<double, int>();
-        edt_omp.set_num_threads(edt_thread_num);
-        auto edt_result1 = edt_omp.NI_EuclideanFeatureTransform_(boundary_map.data(), N, dims.data());
-        // std::cout << "edt time = " << timer.stop() << std::endl;
-        distance_array = std::move(std::get<0>(edt_result1));
-        auto indexes = std::move(std::get<1>(edt_result1));
-        // std::vector<int> sign_map(input_size, 0);
-
-        auto grad_computer = ComputeGrad<T_quant>(N, dims.data(), quant_index);
-        for (size_t i = 0; i < input_size; i++) {
-            if (boundary_map[i] == 0)  // boundary points
-            {
-                auto [compensate_direction, change_distance] = check_compensate_direction_distance_2d(i);
-                auto max_iter = std::max_element(change_distance.begin(), change_distance.end());
-                auto min_iter = std::min_element(change_distance.begin(), change_distance.end());
-                int direction = std::distance(change_distance.begin(), min_iter);
-                double sign = std::pow(-1.0, direction + 1) * compensate_direction[direction];
-                double grad = grad_computer.get_grad(i);
-                if (grad >= 1.0) {
-                    sign = 0;
-                }
-                compensation_map[i] = sign * comepnsation_value;
-                sign_map[i] = sign;
-            }
-        }
-        // complete the sign map
-        for (size_t i = 0; i < input_size; i++) {
-            if (boundary_map[i] == 1)  // non-boundary points ·
-            {
-                char sign = get_sign(compensation_map[indexes[i]]);
-                sign_map[i] = sign;
-            }
-        }
-        // get the second boundry map
-        auto boundary_map2 = get_boundary(sign_map.data(), N, dims.data());
-        // filp and remove the boundary points
-        for (int i = 0; i < input_size; i++) {
-            if (boundary_map2[i] == 1 && boundary_mask[i] == false) {
-                boundary_map2[i] = 0;  // boundary lable
-            } else {
-                boundary_map2[i] = 1;
-            }
-        }
-        // get the second edt map
-        timer.start();
-        edt_omp.reset_timer();
-        auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform_(boundary_map2.data(), N, dims.data());
-        // distance_array2 = std::move(std::get<0>(edt_result2));
-        distance_array2 = std::get<0>(edt_result2);
-        // auto indexes2 = std::move(std::get<1>(edt_result2));
-
-        for (size_t i = 0; i < input_size; i++) {
-            if (boundary_map[i] == 1)  // non-boundary points ·
-            {
-                double distance1 = distance_array[i] + 0.5;
-                double distance2 = distance_array2[i] + 0.5;
-                char sign = sign_map[i];
-                double width = distance2 + distance1;
-                // double relative_r = (distance1 ) / (width);
-                // double magnitude = (1 - relative_r) * (1 - relative_r);
-                // double magnitude = std::pow(1 - relative_r, 1.5);
-                double magnitude = (1 / distance1) / (1 / distance1 + 1 / distance2);
-                compensation_map[i] = sign * magnitude * comepnsation_value;
-            }
-        }
         return compensation_map;
     }
 
     std::vector<T_data> get_compensation_map_3d() {
-        // auto boundary_map = get_boundary(quant_index, N, dims.data());
 
         auto bounday_and_sign = get_boundary_and_sign_map_3d(quant_index, N, dims.data(), edt_thread_num);
         auto boundary_map = std::get<0>(bounday_and_sign);
         auto sign_map = std::get<1>(bounday_and_sign);
         char edge_tag = 1;
-
-        // write boundary map to file
-        writefile("boundary3d.int8", boundary_map.data(), input_size);
-
         auto timer = Timer();
 
         timer.start();
         auto edt_omp = PM2::EDT_OMP<T_data, int>();
         edt_omp.set_num_threads(edt_thread_num);
-        auto edt_result = edt_omp.NI_EuclideanFeatureTransform(boundary_map.data(), N, dims.data(), edt_thread_num)
-        ;
-        // auto edt_result = NI_EuclideanFeatureTransform<double, int>(boundary_map.data(), N, dims.data());
+        auto edt_result = edt_omp.NI_EuclideanFeatureTransform(boundary_map.data(), N, dims.data(), edt_thread_num);
         auto distance_array = std::move(edt_result.distance);
         auto indexes = std::move(edt_result.indexes);
 
-
-        // print edt time
-        printf("edt time = %.10f \n", edt_omp.get_edt_time());
-
-        writefile("distance1.f32", distance_array.get(), input_size);
-        // writefile("sign.int8", sign_map.data(), input_size);
-        // complete the sign map
-        #pragma omp parallel for num_threads(edt_thread_num)
+#pragma omp parallel for num_threads(edt_thread_num)
         for (size_t i = 0; i < input_size; i++) {
             if (boundary_map[i] != edge_tag)  // non-boundary points ·
             {
                 sign_map[i] = sign_map[indexes[i]];
             }
         }
-        writefile("sign.int8", sign_map.data(), input_size);
-
-
 
         // dump the sign map
 
         // get the second boundry map
         auto boundary_map2 = get_boundary(sign_map.data(), N, dims.data(), edt_thread_num);
 
-        writefile("boundary2.int8", boundary_map2.data(), input_size);
 
-        #pragma omp parallel for num_threads(edt_thread_num)
+#pragma omp parallel for num_threads(edt_thread_num)
         for (int i = 0; i < input_size; i++) {
             if (boundary_map2[i] == edge_tag && boundary_map[i] == edge_tag) {
                 boundary_map2[i] = 0;  // boundary lable
@@ -520,9 +411,9 @@ class Compensation {
         }
 
         auto rbf = [](double r) -> double {
-            // return std::exp(-0.3*r);
+            // return std::exp(-0.2*r);
             // return (1/r) / (1/r + 1); //?
-            return 1 / sqrt(1 + r * r);  // inverse_multiquadric
+            return 1 / sqrt(1 + r * r * 1.0);  // inverse_multiquadric
             // cubic, thin-plate, gaussian, multiquadric, inverse multiquadric
             // thin-plate:
             // return r*r * log(r);
@@ -539,59 +430,52 @@ class Compensation {
         };
 
         timer.start();
-        // edt_omp.reset_timer();
-        // auto edt_result2 = NI_EuclideanFeatureTransform<double, int>(boundary_map2.data(), N, dims.data()); //
         auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform(boundary_map2.data(), N, dims.data(), edt_thread_num);
-
-        std::cout << "edt time = " << timer.stop() << std::endl;
         auto distance_array2 = std::move(edt_result2.distance);
         auto indexes2 = std::move(edt_result2.indexes);
-        // dump the distance array
-        writefile("distance2.f32", distance_array2.get(), input_size);
-
-        // {
-        //     distance_array1.resize(input_size, 0);
-        //     for (size_t i = 0; i < input_size; i++) {
-        //         distance_array1[i] = distance_array2[i];
-        //     }
-        // }
 
         if (use_rbf == true) {
-            #pragma omp parallel for num_threads(edt_thread_num)
+#pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
+                double distance1 = distance_array[i] + 0.5;
+                double distance2 = distance_array2[i] + 0.5;
+                char sign = sign_map[indexes[i]];
                 if (1) {
-                    double distance1 = distance_array[i] + 0.5;
-                    double distance2 = distance_array2[i] + 0.5;
-                    char sign = sign_map[i];
-                    double compensation_value = 0;
+                    // double compensation_value = 0;
                     double d0 = cal_distance(indexes[i], indexes2[i]);
-                    double a = rbf(0.5);
+                    double a = rbf(0);
                     double b = rbf(d0);
-                    double w0 = a / (a * a - b * b) * sign;
-                    double w1 = b / (-a * a + b * b) * sign;
-                    compensation_map[i] = (w0 * rbf(distance1) + w1 * rbf(distance2)) * comepnsation_value;
-                }
-            }
-        } else {
-            #pragma omp parallel for num_threads(edt_thread_num)
-            for (size_t i = 0; i < input_size; i++) {
-                if (1) {
-                    double distance1 = distance_array[i] + 0.5;
-                    double distance2 = distance_array2[i] + 0.5;
-                    char sign = sign_map[i];
+                    double w0 = a / (a * a - b * b);
+                    double w1 = b / (-a * a + b * b);
+                    double sx = (w0 * rbf(distance1) + w1 * rbf(distance2));
+                    // clamp sx between [-1 1]
+                    if (sx > 1) {
+                        sx = 1;
+                    } else if (sx < -1) {
+                        sx = -1;
+                    }
+                    compensation_map[i] = comepnsation_value * sx * sign;
+
+                } else {
                     double magnitude = (1 / distance1) / (1 / distance1 + 1 / distance2);
                     compensation_map[i] = sign * magnitude * comepnsation_value;
                 }
             }
+        } else {
+#pragma omp parallel for num_threads(edt_thread_num)
+            for (size_t i = 0; i < input_size; i++) {
+                double distance1 = distance_array[i] + 0.5;
+                double distance2 = distance_array2[i] + 0.5;
+                char sign = sign_map[i];
+                double magnitude = (1 / distance1) / (1 / distance1 + 1 / distance2);
+                compensation_map[i] = sign * magnitude * comepnsation_value;
+            }
         }
-        
+
         return compensation_map;
     }
 
-    std::vector<T_data> get_distance_array1() {
-        return distance_array1;
-    }
-
+    std::vector<T_data> get_distance_array1() { return distance_array1; }
 
     std::vector<T_data> get_compensation_map_3d(std::vector<int> &sign_map) {
         auto boundary_map = get_boundary(quant_index, N, dims.data());
@@ -699,6 +583,100 @@ class Compensation {
         return compensation_map;
     }
 
+    std::vector<T_data> get_compensation_map_2d(std::vector<double> &distance_array,
+                                                std::vector<double> &distance_array2, std::vector<int> &sign_map) {
+        auto boundary_map = get_boundary(quant_index, N, dims.data());
+        // flip the boundary map tag
+        std::vector<bool> boundary_mask(input_size, false);
+        sign_map.resize(input_size, 0);
+        size_t edge_point_count = 0;
+        for (int i = 0; i < input_size; i++) {
+            if (boundary_map[i] == 1) {
+                boundary_map[i] = 0;      // boundary lable
+                boundary_mask[i] = true;  // boundary lable
+                edge_point_count++;
+            } else {
+                boundary_map[i] = 1;
+            }
+        }
+        auto timer = Timer();
+        // std::cout << "edge point count = " << edge_point_count << std::endl;
+        if (edge_point_count == 0) {
+            distance_array.resize(input_size, std::numeric_limits<double>::max());
+            distance_array2.resize(input_size, std::numeric_limits<double>::max());
+
+            return compensation_map;
+        }
+
+        // timer.start();
+        auto edt_omp = PM2::EDT_OMP<double, int>();
+        edt_omp.set_num_threads(edt_thread_num);
+        auto edt_result1 = edt_omp.NI_EuclideanFeatureTransform_(boundary_map.data(), N, dims.data());
+        // std::cout << "edt time = " << timer.stop() << std::endl;
+        distance_array = std::move(std::get<0>(edt_result1));
+        auto indexes = std::move(std::get<1>(edt_result1));
+        // std::vector<int> sign_map(input_size, 0);
+
+        auto grad_computer = ComputeGrad<T_quant>(N, dims.data(), quant_index);
+        for (size_t i = 0; i < input_size; i++) {
+            if (boundary_map[i] == 0)  // boundary points
+            {
+                auto [compensate_direction, change_distance] = check_compensate_direction_distance_2d(i);
+                auto max_iter = std::max_element(change_distance.begin(), change_distance.end());
+                auto min_iter = std::min_element(change_distance.begin(), change_distance.end());
+                int direction = std::distance(change_distance.begin(), min_iter);
+                double sign = std::pow(-1.0, direction + 1) * compensate_direction[direction];
+                double grad = grad_computer.get_grad(i);
+                if (grad >= 1.0) {
+                    sign = 0;
+                }
+                compensation_map[i] = sign * comepnsation_value;
+                sign_map[i] = sign;
+            }
+        }
+        // complete the sign map
+        for (size_t i = 0; i < input_size; i++) {
+            if (boundary_map[i] == 1)  // non-boundary points ·
+            {
+                char sign = get_sign(compensation_map[indexes[i]]);
+                sign_map[i] = sign;
+            }
+        }
+        // get the second boundry map
+        auto boundary_map2 = get_boundary(sign_map.data(), N, dims.data());
+        // filp and remove the boundary points
+        for (int i = 0; i < input_size; i++) {
+            if (boundary_map2[i] == 1 && boundary_mask[i] == false) {
+                boundary_map2[i] = 0;  // boundary lable
+            } else {
+                boundary_map2[i] = 1;
+            }
+        }
+        // get the second edt map
+        timer.start();
+        edt_omp.reset_timer();
+        auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform_(boundary_map2.data(), N, dims.data());
+        // distance_array2 = std::move(std::get<0>(edt_result2));
+        distance_array2 = std::get<0>(edt_result2);
+        // auto indexes2 = std::move(std::get<1>(edt_result2));
+
+        for (size_t i = 0; i < input_size; i++) {
+            if (boundary_map[i] == 1)  // non-boundary points ·
+            {
+                double distance1 = distance_array[i] + 0.5;
+                double distance2 = distance_array2[i] + 0.5;
+                char sign = sign_map[i];
+                double width = distance2 + distance1;
+                // double relative_r = (distance1 ) / (width);
+                // double magnitude = (1 - relative_r) * (1 - relative_r);
+                // double magnitude = std::pow(1 - relative_r, 1.5);
+                double magnitude = (1 / distance1) / (1 / distance1 + 1 / distance2);
+                compensation_map[i] = sign * magnitude * comepnsation_value;
+            }
+        }
+        return compensation_map;
+    }
+
    private:
     int N;
     std::vector<int> dims;
@@ -713,6 +691,7 @@ class Compensation {
     double edt_time = 0.0;
     bool use_rbf = false;
     std::vector<T_data> distance_array1;
+    T_quant frequent_quant_index = 0;
 };
 }  // namespace PM
 

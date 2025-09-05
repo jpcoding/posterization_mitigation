@@ -640,7 +640,7 @@ class EDT_OMP {
         // printf("aux time = %f \n", global_timer.stop());
         global_timer.start();
         if(num_threads== 1 ) {
-            ComputeFT2D3D_single(pi, pf, dims, strides.data(), index_strides.data(), N);
+            ComputeFT2D3D(pi, pf, dims, strides.data(), index_strides.data(), N);
         }
         else {
             ComputeFT2D3D(pi, pf, dims, strides.data(), index_strides.data(), N);

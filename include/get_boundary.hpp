@@ -159,6 +159,13 @@ inline std::tuple<std::vector<char>, std::vector<char>> get_boundary_and_sign_ma
                     sign = get_sign( down -quant_index[idx]); 
                 }
                 sign_map[idx] = sign;
+                // check the gradient
+                double grad_x = std::abs((right - left) / 2.0);
+                double grad_y = std::abs((down - up) / 2.0);
+                double max_grad = std::max(grad_x, grad_y);
+                if(max_grad >=1.0) {
+                    sign_map[idx] = 0;
+                }
             }
         }
     }

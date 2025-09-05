@@ -3,7 +3,8 @@
 
 #include <cmath>
 #include <cstdlib>
-
+#include <unordered_map> 
+#include <vector>
 
 template <typename Type>
 void verify(Type *ori_data, Type *data, size_t num_elements, double &psnr, double &nrmse, double &max_diff) {
@@ -69,6 +70,27 @@ void verify(Type *ori_data, Type *data, size_t num_elements, double &psnr, doubl
     printf("MSE=%.10f\n", mse);
     //        printf("errAutoCorr=%.10f\n", autocorrelation1DLag1<double>(diff, num_elements, diff_sum / num_elements));
     free(diff);
+}
+
+
+template<typename T_data>
+T_data get_most_frequent_quantization_index(const std::vector<T_data>& quant_inds) {
+    std::unordered_map<T_data, size_t> frequency_map;
+    for (const auto& index : quant_inds) {
+        frequency_map[index]++;
+    }
+
+    T_data most_frequent_index = quant_inds[0];
+    size_t max_count = frequency_map[most_frequent_index];
+
+    for (const auto& pair : frequency_map) {
+        if (pair.second > max_count) {
+            most_frequent_index = pair.first;
+            max_count = pair.second;
+        }
+    }
+
+    return most_frequent_index;
 }
 
 #endif 

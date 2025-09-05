@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -13,6 +14,21 @@
 
 using Real = float;
 namespace SZ = SZ3;
+
+
+template <typename T>
+inline int quantization_(T data, double abs_eb)
+{   
+    double recipPrecision = 1/(2*abs_eb);
+    double dataRecip = data*recipPrecision;
+    int s = dataRecip>=-0.5?0:1;
+    return (int)(dataRecip+0.5) - s;
+
+    // double recip = 1.0 / (2.0 * abs_eb);
+    // return std::lround(static_cast<double>(data) * recip);
+}
+
+
 
 int main(int argc, char **argv) {
     CLI::App app{"OMP version of compensation using EDT method"};
@@ -46,8 +62,8 @@ int main(int argc, char **argv) {
     }
     std::vector<Real> original_data(data_size, 0);
     readfile(input_file.c_str(), data_size, original_data.data());
-    float max = *std::max_element(original_data.begin(), original_data.end());
-    float min = *std::min_element(original_data.begin(), original_data.end());
+    double max = double(*std::max_element(original_data.begin(), original_data.end()));
+    double min = double(*std::min_element(original_data.begin(), original_data.end()));
     double rel_eb = eb;
     if (eb_mode == "abs") {
         eb = eb;
@@ -59,25 +75,44 @@ int main(int argc, char **argv) {
     }
     double range = max - min;
     bool operation = true;
-    if (range < 1e-10) {
-        operation = false;
-    }
+    // if (range < 1e-10) {
+    //     operation = false;
+    // }
 
     // make a copy of the original data
     std::vector<Real> dec_data(data_size, 0);
     std::copy(original_data.begin(), original_data.end(), dec_data.begin());
     std::vector<int> quant_inds(data_size, 0);
     printf("max: %f, min: %f\n", max, min);
-    printf("absolute eb: %.6f\n", eb);
+    printf("absolute eb: %.6E\n", eb);
     // create a linear quantizer
-    auto quantizer = SZ::LinearQuantizer<float>();
+    auto quantizer = SZ::LinearQuantizer<Real>(eb, 32768);
     quantizer.set_eb(eb);
     // iterate the input data and quantize it
     if (1) {
         for (size_t i = 0; i < data_size; i++) {
-            quant_inds[i] = quantizer.quantize_and_overwrite(dec_data[i], 0) - 32768;
+            quant_inds[i] = quantization_(original_data[i], eb);
+            double temp = 2*eb * quant_inds[i]; 
+            dec_data[i] = temp;
+            // check if eb is satisfied, if not use the original
+            if (std::abs(dec_data[i] - original_data[i]) > eb) {
+                dec_data[i] = original_data[i];
+                quant_inds[i] = 0;
+            }
+            // quant_inds[i] = quantizer.quantize_and_overwrite(dec_data[i], 0.0) - quantizer.get_radius();
+            // if (quant_inds[i] == -quantizer.get_radius() )
+            // {
+            //     quant_inds[i] = 0;
+            // }
         }
     }
+    int frequent_quant_index = get_most_frequent_quantization_index(quant_inds);
+    printf("frequent quantization index = %d\n", frequent_quant_index);
+
+    double psnr, nrmse, max_diff;
+    verify(original_data.data(), dec_data.data(), data_size, psnr, nrmse, max_diff);
+
+
 
     int max_quant = *std::max_element(quant_inds.begin(), quant_inds.end());
     int min_quant = *std::min_element(quant_inds.begin(), quant_inds.end());
@@ -96,8 +131,6 @@ int main(int argc, char **argv) {
     // writefile((fs::path(argv[N + 2]).filename().string() + ".qcd").c_str(), dec_data.data(), data_size);
 
     // verify the data
-    double psnr, nrmse, max_diff;
-    verify(original_data.data(), dec_data.data(), data_size, psnr, nrmse, max_diff);
 
     // cast dims to size_t
 
@@ -115,7 +148,7 @@ int main(int argc, char **argv) {
     double threshold = 0.5;
     size_t count = 0;
     for (size_t i = 0; i < data_size; i++) {
-        if (quant_inds[i] == 0) {
+        if (quant_inds[i] == frequent_quant_index) {
             count++;
         }
     }
@@ -131,6 +164,7 @@ int main(int argc, char **argv) {
     if (operation) {
         auto compensator = PM::Compensation<Real, int>(N, dims.data(), dec_data.data(), quant_inds.data(),
                                                        max_diff * compensation_factor);
+        compensator.set_frequent_quant_index(frequent_quant_index);
         compensator.set_edt_thread_num(num_threads);
         compensator.set_use_rbf(use_rbf);
 
@@ -138,6 +172,7 @@ int main(int argc, char **argv) {
 
         // writefile("compensation_map.f32", compensation_map.data(), data_size);
         // add the compensation map to the dec_data
+        #pragma omp parallel for num_threads(num_threads)
         for (int i = 0; i < data_size; i++) {
             dec_data[i] += compensation_map[i];
         }

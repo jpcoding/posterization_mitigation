@@ -29,6 +29,9 @@ target_link_libraries(test_ssim OpenMP::OpenMP_CXX )
 add_executable(test_ssim_file test_ssim_file.cpp)
 target_link_libraries(test_ssim_file OpenMP::OpenMP_CXX )
 
+add_executable(test_field_error_bounds test_field_error_bounds.cpp)
+target_link_libraries(test_field_error_bounds OpenMP::OpenMP_CXX )
+
 #define the install process 
 install(TARGETS 
     test_3d 
@@ -39,5 +42,6 @@ install(TARGETS
     test_3d_slices 
     test_ssim 
     test_ssim_file
+    test_field_error_bounds
     RUNTIME DESTINATION bin/test/
 )

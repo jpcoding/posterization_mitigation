@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cmath>
 #include <omp.h>
+#include <iostream> 
 
 #define K1 0.01
 #define K2 0.03
@@ -301,7 +302,7 @@ namespace PM
                 }
             }
         }
-        // std::cout << "nw = " << nw << std::endl; 
+        std::cout << "nw = " << nw << std::endl; 
         return ssimSum / nw;
     }
 
