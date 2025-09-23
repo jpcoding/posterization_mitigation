@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "utils/file_utils.hpp"
-
 // this function does not require communication between processes
 void edt_init_mpi(char *input, int *output, char b_tag, uint width, uint height, uint depth, int *mpi_coords) {
     size_t block_size = width * height * depth;

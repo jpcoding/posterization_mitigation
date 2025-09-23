@@ -1,0 +1,329 @@
+SZp Compression Benchmark Configuration
+======================================
+Input file: /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32
+Block size: 64
+Error bound: 0.005
+Data type: float
+Access type: random
+Repetitions: 5
+Warmup runs: 5
+CSV output: results.csv
+======================================
+
+Reading input data...
+Data elements: 25000000
+
+Performing 5 warmup runs...
+  Warmup run 1 of 5: time=0.177336, size=28135780, CR=3.554193
+  Warmup run 2 of 5: time=0.177748, size=28135780, CR=3.554193
+  Warmup run 3 of 5: time=0.178445, size=28135780, CR=3.554193
+  Warmup run 4 of 5: time=0.179705, size=28135780, CR=3.554193
+  Warmup run 5 of 5: time=0.178371, size=28135780, CR=3.554193
+
+Starting 5 benchmark runs...
+
+Run 1 of 5:
+  timecost=0.177490, compression size=28135780, CR=3.554193
+
+Run 2 of 5:
+  timecost=0.178013, compression size=28135780, CR=3.554193
+
+Run 3 of 5:
+  timecost=0.178012, compression size=28135780, CR=3.554193
+
+Run 4 of 5:
+  timecost=0.178468, compression size=28135780, CR=3.554193
+
+Run 5 of 5:
+  timecost=0.178078, compression size=28135780, CR=3.554193
+  Writing compressed data to /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32.szp
+
+======= Performance Statistics (excluding warmup runs) =======
+Time (seconds): Min=0.177490, Max=0.178468, Avg=0.178012, StdDev=0.000311
+Compression Ratio: Min=3.554193, Max=3.554193, Avg=3.554193, StdDev=0.000000
+===========================================================
+Results written to CSV: results.csv
+
+Benchmark completed.
+SZp Compression Benchmark Configuration
+======================================
+Input file: /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32
+Block size: 64
+Error bound: 0.005
+Data type: float
+Access type: random
+Repetitions: 5
+Warmup runs: 5
+CSV output: results.csv
+======================================
+
+Reading input data...
+Data elements: 25000000
+
+Performing 5 warmup runs...
+  Warmup run 1 of 5: time=0.094438, size=28136178, CR=3.554143
+  Warmup run 2 of 5: time=0.094062, size=28136178, CR=3.554143
+  Warmup run 3 of 5: time=0.094184, size=28136178, CR=3.554143
+  Warmup run 4 of 5: time=0.093917, size=28136178, CR=3.554143
+  Warmup run 5 of 5: time=0.093724, size=28136178, CR=3.554143
+
+Starting 5 benchmark runs...
+
+Run 1 of 5:
+  timecost=0.093752, compression size=28136178, CR=3.554143
+
+Run 2 of 5:
+  timecost=0.093544, compression size=28136178, CR=3.554143
+
+Run 3 of 5:
+  timecost=0.093643, compression size=28136178, CR=3.554143
+
+Run 4 of 5:
+  timecost=0.093392, compression size=28136178, CR=3.554143
+
+Run 5 of 5:
+  timecost=0.093514, compression size=28136178, CR=3.554143
+  Writing compressed data to /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32.szp
+
+======= Performance Statistics (excluding warmup runs) =======
+Time (seconds): Min=0.093392, Max=0.093752, Avg=0.093569, StdDev=0.000122
+Compression Ratio: Min=3.554143, Max=3.554143, Avg=3.554143, StdDev=0.000000
+===========================================================
+Results written to CSV: results.csv
+
+Benchmark completed.
+SZp Compression Benchmark Configuration
+======================================
+Input file: /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32
+Block size: 64
+Error bound: 0.005
+Data type: float
+Access type: random
+Repetitions: 5
+Warmup runs: 5
+CSV output: results.csv
+======================================
+
+Reading input data...
+Data elements: 25000000
+
+Performing 5 warmup runs...
+  Warmup run 1 of 5: time=0.050199, size=28136892, CR=3.554053
+  Warmup run 2 of 5: time=0.049907, size=28136892, CR=3.554053
+  Warmup run 3 of 5: time=0.048584, size=28136892, CR=3.554053
+  Warmup run 4 of 5: time=0.048627, size=28136892, CR=3.554053
+  Warmup run 5 of 5: time=0.048615, size=28136892, CR=3.554053
+
+Starting 5 benchmark runs...
+
+Run 1 of 5:
+  timecost=0.048656, compression size=28136892, CR=3.554053
+
+Run 2 of 5:
+  timecost=0.048653, compression size=28136892, CR=3.554053
+
+Run 3 of 5:
+  timecost=0.049238, compression size=28136892, CR=3.554053
+
+Run 4 of 5:
+  timecost=0.048541, compression size=28136892, CR=3.554053
+
+Run 5 of 5:
+  timecost=0.048487, compression size=28136892, CR=3.554053
+  Writing compressed data to /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32.szp
+
+======= Performance Statistics (excluding warmup runs) =======
+Time (seconds): Min=0.048487, Max=0.049238, Avg=0.048715, StdDev=0.000269
+Compression Ratio: Min=3.554053, Max=3.554053, Avg=3.554053, StdDev=0.000000
+===========================================================
+Results written to CSV: results.csv
+
+Benchmark completed.
+SZp Compression Benchmark Configuration
+======================================
+Input file: /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32
+Block size: 64
+Error bound: 0.005
+Data type: float
+Access type: random
+Repetitions: 5
+Warmup runs: 5
+CSV output: results.csv
+======================================
+
+Reading input data...
+Data elements: 25000000
+
+Performing 5 warmup runs...
+  Warmup run 1 of 5: time=0.028636, size=28137461, CR=3.553981
+  Warmup run 2 of 5: time=0.026767, size=28137461, CR=3.553981
+  Warmup run 3 of 5: time=0.027274, size=28137461, CR=3.553981
+  Warmup run 4 of 5: time=0.026389, size=28137461, CR=3.553981
+  Warmup run 5 of 5: time=0.026410, size=28137461, CR=3.553981
+
+Starting 5 benchmark runs...
+
+Run 1 of 5:
+  timecost=0.035871, compression size=28137461, CR=3.553981
+
+Run 2 of 5:
+  timecost=0.026147, compression size=28137461, CR=3.553981
+
+Run 3 of 5:
+  timecost=0.037926, compression size=28137461, CR=3.553981
+
+Run 4 of 5:
+  timecost=0.026192, compression size=28137461, CR=3.553981
+
+Run 5 of 5:
+  timecost=0.039327, compression size=28137461, CR=3.553981
+  Writing compressed data to /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32.szp
+
+======= Performance Statistics (excluding warmup runs) =======
+Time (seconds): Min=0.026147, Max=0.039327, Avg=0.033093, StdDev=0.005759
+Compression Ratio: Min=3.553981, Max=3.553981, Avg=3.553981, StdDev=0.000000
+===========================================================
+Results written to CSV: results.csv
+
+Benchmark completed.
+SZp Compression Benchmark Configuration
+======================================
+Input file: /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32
+Block size: 64
+Error bound: 0.005
+Data type: float
+Access type: random
+Repetitions: 5
+Warmup runs: 5
+CSV output: results.csv
+======================================
+
+Reading input data...
+Data elements: 25000000
+
+Performing 5 warmup runs...
+  Warmup run 1 of 5: time=0.018712, size=28137005, CR=3.554039
+  Warmup run 2 of 5: time=0.015211, size=28137005, CR=3.554039
+  Warmup run 3 of 5: time=0.014336, size=28137005, CR=3.554039
+  Warmup run 4 of 5: time=0.014146, size=28137005, CR=3.554039
+  Warmup run 5 of 5: time=0.014738, size=28137005, CR=3.554039
+
+Starting 5 benchmark runs...
+
+Run 1 of 5:
+  timecost=0.014652, compression size=28137005, CR=3.554039
+
+Run 2 of 5:
+  timecost=0.014478, compression size=28137005, CR=3.554039
+
+Run 3 of 5:
+  timecost=0.014293, compression size=28137005, CR=3.554039
+
+Run 4 of 5:
+  timecost=0.014208, compression size=28137005, CR=3.554039
+
+Run 5 of 5:
+  timecost=0.014275, compression size=28137005, CR=3.554039
+  Writing compressed data to /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32.szp
+
+======= Performance Statistics (excluding warmup runs) =======
+Time (seconds): Min=0.014208, Max=0.014652, Avg=0.014381, StdDev=0.000162
+Compression Ratio: Min=3.554039, Max=3.554039, Avg=3.554039, StdDev=0.000000
+===========================================================
+Results written to CSV: results.csv
+
+Benchmark completed.
+SZp Compression Benchmark Configuration
+======================================
+Input file: /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32
+Block size: 64
+Error bound: 0.005
+Data type: float
+Access type: random
+Repetitions: 5
+Warmup runs: 5
+CSV output: results.csv
+======================================
+
+Reading input data...
+Data elements: 25000000
+
+Performing 5 warmup runs...
+  Warmup run 1 of 5: time=0.013906, size=28185148, CR=3.547968
+  Warmup run 2 of 5: time=0.008850, size=28185148, CR=3.547968
+  Warmup run 3 of 5: time=0.007938, size=28185148, CR=3.547968
+  Warmup run 4 of 5: time=0.007931, size=28185148, CR=3.547968
+  Warmup run 5 of 5: time=0.009976, size=28185148, CR=3.547968
+
+Starting 5 benchmark runs...
+
+Run 1 of 5:
+  timecost=0.009117, compression size=28185148, CR=3.547968
+
+Run 2 of 5:
+  timecost=0.009102, compression size=28185148, CR=3.547968
+
+Run 3 of 5:
+  timecost=0.009647, compression size=28185148, CR=3.547968
+
+Run 4 of 5:
+  timecost=0.009982, compression size=28185148, CR=3.547968
+
+Run 5 of 5:
+  timecost=0.009241, compression size=28185148, CR=3.547968
+  Writing compressed data to /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32.szp
+
+======= Performance Statistics (excluding warmup runs) =======
+Time (seconds): Min=0.009102, Max=0.009982, Avg=0.009418, StdDev=0.000344
+Compression Ratio: Min=3.547968, Max=3.547968, Avg=3.547968, StdDev=0.000000
+===========================================================
+Results written to CSV: results.csv
+
+Benchmark completed.
+SZp Compression Benchmark Configuration
+======================================
+Input file: /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32
+Block size: 64
+Error bound: 0.005
+Data type: float
+Access type: random
+Repetitions: 5
+Warmup runs: 5
+CSV output: results.csv
+======================================
+
+Reading input data...
+Data elements: 25000000
+
+Performing 5 warmup runs...
+  Warmup run 1 of 5: time=0.014946, size=28206076, CR=3.545335
+  Warmup run 2 of 5: time=0.006286, size=28206076, CR=3.545335
+  Warmup run 3 of 5: time=0.005146, size=28206076, CR=3.545335
+  Warmup run 4 of 5: time=0.005277, size=28206076, CR=3.545335
+  Warmup run 5 of 5: time=0.005112, size=28206076, CR=3.545335
+
+Starting 5 benchmark runs...
+
+Run 1 of 5:
+  timecost=0.004979, compression size=28206076, CR=3.545335
+
+Run 2 of 5:
+  timecost=0.005054, compression size=28206076, CR=3.545335
+
+Run 3 of 5:
+  timecost=0.005370, compression size=28206076, CR=3.545335
+
+Run 4 of 5:
+  timecost=0.005512, compression size=28206076, CR=3.545335
+
+Run 5 of 5:
+  timecost=0.005230, compression size=28206076, CR=3.545335
+  Writing compressed data to /project/xli281_uksr/pjiao/data/hurricane_100x500x500/Uf48.bin.f32.szp
+
+======= Performance Statistics (excluding warmup runs) =======
+Time (seconds): Min=0.004979, Max=0.005512, Avg=0.005229, StdDev=0.000197
+Compression Ratio: Min=3.545335, Max=3.545335, Avg=3.545335, StdDev=0.000000
+===========================================================
+Results written to CSV: results.csv
+
+Benchmark completed.

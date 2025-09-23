@@ -45,19 +45,18 @@ class EDT_OMP {
         this->distance_time = 0;
     }
 
-    static void VoronoiFT(int *pf, int len, int *coor, int rank, int d, size_t stride, size_t cstride,
-                          int **f, int *g) {
+    static void VoronoiFT(int *pf, int len, int *coor, int rank, int d, size_t stride, size_t cstride, int **f,
+                          int *g) {
         int l = -1, ii, maxl, idx1, idx2;
         int jj;
 
         for (ii = 0; ii < len; ii++)
-            for (jj = 0; jj < rank; jj++)
-                f[ii][jj] = pf [ii * stride + jj];
+            for (jj = 0; jj < rank; jj++) f[ii][jj] = pf[ii * stride + jj];
 
         for (ii = 0; ii < len; ii++) {
-            if (f[ii][0]>= 0) {
-                double  fd = f[ii][d];
-                double  wR = 0;
+            if (f[ii][0] >= 0) {
+                double fd = f[ii][d];
+                double wR = 0;
                 for (jj = 0; jj < rank; jj++) {
                     if (jj != d) {
                         int tw = f[ii][jj] - coor[jj];
@@ -74,9 +73,9 @@ class EDT_OMP {
                     c = a + b;
                     for (jj = 0; jj < rank; jj++) {
                         if (jj != d) {
-                            double  cc = coor[jj];
-                            double  tu = f[idx2][jj] - cc;
-                            double  tv = f[idx1][jj] - cc;
+                            double cc = coor[jj];
+                            double tu = f[idx2][jj] - cc;
+                            double tv = f[idx1][jj] - cc;
                             uR += tu * tu;
                             vR += tv * tv;
                         }
@@ -92,7 +91,7 @@ class EDT_OMP {
         if (maxl >= 0) {
             l = 0;
             for (ii = 0; ii < len; ii++) {
-                double  delta1 = 0, t;
+                double delta1 = 0, t;
                 for (jj = 0; jj < rank; jj++) {
                     t = jj == d ? f[g[l]][jj] - ii : f[g[l]][jj] - coor[jj];
 
@@ -110,14 +109,12 @@ class EDT_OMP {
                     ++l;
                 }
                 idx1 = g[l];
-                for (jj = 0; jj < rank; jj++)  pf[ii * stride + jj] = f[idx1][jj];
+                for (jj = 0; jj < rank; jj++) pf[ii * stride + jj] = f[idx1][jj];
             }
         }
     }
 
-
-    void ComputeFT2D3D(char *pi, int *pf, int *ishape, const size_t *istrides, const size_t *fstrides,
-                       int rank) {
+    void ComputeFT2D3D__(char *pi, int *pf, int *ishape, const size_t *istrides, const size_t *fstrides, int rank) {
         std::vector<int> coor(rank, 0);
         if (rank == 2) {
             omp_set_num_threads(num_threads);
@@ -171,7 +168,7 @@ class EDT_OMP {
             }
             // printf("cache line allocation time = %f\n", global_timer.stop());
 
-            #pragma omp parallel for collapse(2) num_threads(num_threads)
+#pragma omp parallel for collapse(2) num_threads(num_threads)
             for (int i = 0; i < ishape[0]; i++)  // 384
             {
                 for (int j = 0; j < ishape[1]; j++)  // 384
@@ -189,8 +186,7 @@ class EDT_OMP {
                 }
             }
 
-
-            int direction = 0; 
+            int direction = 0;
             int x_dir = (direction + 1) % 3;
             int y_dir = (direction + 2) % 3;
 
@@ -204,12 +200,13 @@ class EDT_OMP {
                     coor_local[direction] = 0;
                     coor_local[y_dir] = j;
                     coor_local[x_dir] = i;
-                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank, direction, fstrides[direction],
-                              1, local_f_ptrs + max_dim * cur_thread_id, local_g + cur_thread_id * max_dim);
+                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                              direction, fstrides[direction], 1, local_f_ptrs + max_dim * cur_thread_id,
+                              local_g + cur_thread_id * max_dim);
                 }
             }
 
-            direction = 1; 
+            direction = 1;
             x_dir = (direction + 1) % 3;
             y_dir = (direction + 2) % 3;
 
@@ -222,8 +219,9 @@ class EDT_OMP {
                     coor_local[y_dir] = j;
                     coor_local[direction] = 0;
                     coor_local[x_dir] = i;
-                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank, direction, fstrides[direction],
-                              1, local_f_ptrs + max_dim * cur_thread_id, local_g + cur_thread_id * max_dim);
+                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                              direction, fstrides[direction], 1, local_f_ptrs + max_dim * cur_thread_id,
+                              local_g + cur_thread_id * max_dim);
                 }
             }
             direction = 2;
@@ -239,8 +237,9 @@ class EDT_OMP {
                     coor_local[y_dir] = j;
                     coor_local[x_dir] = i;
                     coor_local[direction] = 0;
-                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank, direction, fstrides[direction],
-                              1, local_f_ptrs + max_dim * cur_thread_id, local_g + cur_thread_id * max_dim);
+                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                              direction, fstrides[direction], 1, local_f_ptrs + max_dim * cur_thread_id,
+                              local_g + cur_thread_id * max_dim);
                 }
             }
             free(local_f_ptrs);
@@ -249,15 +248,239 @@ class EDT_OMP {
         }
     }
 
+    void ComputeFT2D3D(char *pi, int *pf, int *ishape, const size_t *istrides, const size_t *fstrides, int rank) {
+        std::vector<int> coor(rank, 0);
+        if (rank == 2) {
+            omp_set_num_threads(num_threads);
+
+            int max_dim = std::max(ishape[0], ishape[1]);
+
+            // -------------------------
+            // Allocate per-thread buffers
+            // -------------------------
+            std::vector<int *> local_f(num_threads);
+            std::vector<int *> local_g(num_threads);
+            std::vector<int **> local_f_ptrs(num_threads);
+            std::vector<int *> coor_locals(num_threads);
+
+            for (int t = 0; t < num_threads; t++) {
+                local_f[t] = (int *)aligned_alloc(64, max_dim * 2 * sizeof(int));
+                local_g[t] = (int *)aligned_alloc(64, max_dim * sizeof(int));
+                coor_locals[t] = (int *)aligned_alloc(64, 2 * sizeof(int));
+                // build pointer array for this thread
+                local_f_ptrs[t] = (int **)malloc(max_dim * sizeof(int *));
+                for (int j = 0; j < max_dim; j++) {
+                    local_f_ptrs[t][j] = local_f[t] + j * 2;
+                }
+            }
+
+            // -------------------------
+            // Initialize pf (seed points)
+            // -------------------------
+            #pragma omp parallel for collapse(1) num_threads(num_threads)
+            for (int i = 0; i < ishape[0]; i++) {
+                for (int j = 0; j < ishape[1]; j++) {
+                    size_t idx = i * istrides[0] + j * istrides[1];
+                    if (pi[idx] != edge_tag) {
+                        pf[idx * 2] = -1;
+                    } else {
+                        pf[idx * 2] = j;
+                        pf[idx * 2 + 1] = i;
+                    }
+                }
+            }
+
+            // -------------------------
+            // First sweep: direction 0 (y sweep)
+            // -------------------------
+            #pragma omp parallel for num_threads(num_threads)
+            for (int i = 0; i < ishape[1]; i++) {
+                int tid = omp_get_thread_num();
+                coor_locals[tid][1] = i;  // y-coordinate
+
+                VoronoiFT(pf + i * fstrides[1], ishape[0], coor_locals[tid], rank, 0, fstrides[0], fstrides[2],
+                          local_f_ptrs[tid], local_g[tid]);
+            }
+
+            // -------------------------
+            // Second sweep: direction 1 (x sweep)
+            // -------------------------
+            #pragma omp parallel for num_threads(num_threads)
+            for (int i = 0; i < ishape[0]; i++) {
+                int tid = omp_get_thread_num();
+                coor_locals[tid][0] = i;  // x-coordinate
+
+                VoronoiFT(pf + i * fstrides[0], ishape[1], coor_locals[tid], rank, 1, fstrides[1], fstrides[2],
+                          local_f_ptrs[tid], local_g[tid]);
+            }
+
+            // -------------------------
+            // Cleanup per-thread buffers
+            // -------------------------
+            for (int t = 0; t < num_threads; t++) {
+                free(local_f[t]);
+                free(local_g[t]);
+                free(local_f_ptrs[t]);
+                free(coor_locals[t]);
+            }
+
+        } else if (rank == 3) {
+            omp_set_num_threads(num_threads);
+
+            int max_dim = std::max(ishape[0], std::max(ishape[1], ishape[2]));
+
+            // Allocate per-thread buffers
+            std::vector<int *> local_f(num_threads);
+            std::vector<int *> local_g(num_threads);
+            std::vector<int **> local_f_ptrs(num_threads);
+            std::vector<int *> coor_locals(num_threads);
+
+            // #pragma omp parallel for num_threads(num_threads)
+            // for (int t = 0; t < num_threads; t++) {
+            //     local_f[t] = (int *)aligned_alloc(64, max_dim*3*sizeof(int));
+            //     local_g[t] = (int *) aligned_alloc(64, max_dim*sizeof(int));
+            //     coor_locals[t] = (int *) aligned_alloc(64, 3*sizeof(int));
+            //     local_f_ptrs[t] = (int **) malloc(max_dim*sizeof(int*));
+            //     for (int j = 0; j < max_dim; j++)
+            //         local_f_ptrs[t][j] = local_f[t] + j*3;
+
+            //     std::fill(local_f[t], local_f[t] + max_dim*3, 0);
+            //     std::fill(local_g[t], local_g[t] + max_dim, 0);
+            //     std::fill(coor_locals[t], coor_locals[t] + 3, 0);
+            // }
+
+
+
+
+
+            // #pragma omp parallel for  num_threads(num_threads)
+            for (int t = 0; t < num_threads; t++) {
+                local_f[t] = (int *)aligned_alloc(64, max_dim * 3 * sizeof(int));
+                local_g[t] = (int *)aligned_alloc(64, max_dim * sizeof(int));
+                coor_locals[t] = (int *)aligned_alloc(64, 3 * sizeof(int));
+                // local_f[t] = (int *)malloc(max_dim * 3 * sizeof(int));
+                // local_g[t] = (int *)malloc(max_dim * sizeof(int));
+                // coor_locals[t] = (int *)malloc(3 * sizeof(int));
+                // build pointer array for this thread
+                local_f_ptrs[t] = (int **)malloc(max_dim * sizeof(int *));
+                for (int j = 0; j < max_dim; j++) {
+                    local_f_ptrs[t][j] = local_f[t] + j * 3;
+                }
+            }
+
+            // // -------------------------
+            // // NUMA-friendly first touch
+            // // -------------------------
+            #pragma omp parallel num_threads(num_threads)
+            {
+                int tid = omp_get_thread_num();
+                std::fill(local_f[tid], local_f[tid] + max_dim * 3, 0);
+                std::fill(local_g[tid], local_g[tid] + max_dim, 0);
+                std::fill(coor_locals[tid], coor_locals[tid] + 3, 0);
+            }
+
+            // Initialization of pf (seed edges)
+            #pragma omp parallel for collapse(2) num_threads(num_threads)
+            for (int i = 0; i < ishape[0]; i++) {
+                for (int j = 0; j < ishape[1]; j++) {
+                    for (int k = 0; k < ishape[2]; k++) {
+                        size_t idx = i * istrides[0] + j * istrides[1] + k * istrides[2];
+                        if (pi[idx] != edge_tag) {
+                            pf[idx * 3] = -1;
+                        } else {
+                            pf[idx * 3] = i;
+                            pf[fstrides[3] + idx * 3] = j;
+                            pf[fstrides[3] * 2 + idx * 3] = k;
+                        }
+                    }
+                }
+            }
+
+
+            // direction = 0
+            {
+                int direction = 0;
+                int x_dir = (direction + 1) % 3;
+                int y_dir = (direction + 2) % 3;
+
+#pragma omp parallel for collapse(2) num_threads(num_threads)
+                for (int i = 0; i < ishape[x_dir]; i++) {
+                    for (int j = 0; j < ishape[y_dir]; j++) {
+                        int tid = omp_get_thread_num();
+                        int *coor_local = coor_locals[tid];
+
+                        coor_local[direction] = 0;
+                        coor_local[x_dir] = i;
+                        coor_local[y_dir] = j;
+
+                        VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                                  direction, fstrides[direction], 1, local_f_ptrs[tid], local_g[tid]);
+                    }
+                }
+            }
+
+            // direction = 1
+            {
+                int direction = 1;
+                int x_dir = (direction + 1) % 3;
+                int y_dir = (direction + 2) % 3;
+
+#pragma omp parallel for collapse(2) num_threads(num_threads)
+                for (int i = 0; i < ishape[x_dir]; i++) {
+                    for (int j = 0; j < ishape[y_dir]; j++) {
+                        int tid = omp_get_thread_num();
+                        int *coor_local = coor_locals[tid];
+
+                        coor_local[direction] = 0;
+                        coor_local[x_dir] = i;
+                        coor_local[y_dir] = j;
+
+                        VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                                  direction, fstrides[direction], 1, local_f_ptrs[tid], local_g[tid]);
+                    }
+                }
+            }
+
+            // direction = 2
+            {
+                int direction = 2;
+                int x_dir = (direction + 1) % 3;
+                int y_dir = (direction + 2) % 3;
+
+#pragma omp parallel for collapse(2) num_threads(num_threads)
+                for (int i = 0; i < ishape[x_dir]; i++) {
+                    for (int j = 0; j < ishape[y_dir]; j++) {
+                        int tid = omp_get_thread_num();
+                        int *coor_local = coor_locals[tid];
+
+                        coor_local[direction] = 0;
+                        coor_local[x_dir] = i;
+                        coor_local[y_dir] = j;
+
+                        VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                                  direction, fstrides[direction], 1, local_f_ptrs[tid], local_g[tid]);
+                    }
+                }
+            }
+
+            for (int t = 0; t < num_threads; t++) {
+                free(local_f[t]);
+                free(local_g[t]);
+                free(local_f_ptrs[t]);
+                free(coor_locals[t]);
+            }
+        }
+    }
+
     void ComputeFT2D3D_single(char *pi, int *pf, int *ishape, const size_t *istrides, const size_t *fstrides,
-                       int rank) {
+                              int rank) {
         if (rank == 2) {
             int max_dim = std::max(ishape[0], ishape[1]);
             std::vector<int> local_f(max_dim * 2);
             std::vector<int> local_g(max_dim);
             std::vector<int *> local_f_ptrs(max_dim);
-            std::array<int, 2> coor_local = {0, 0}; 
-        
+            std::array<int, 2> coor_local = {0, 0};
+
             for (int i = 0; i < num_threads; i++) {
                 for (int j = 0; j < max_dim; j++) {
                     local_f_ptrs[i][j] = local_f[i] + j * 2;
@@ -274,34 +497,34 @@ class EDT_OMP {
                         pf[idx * 2 + 1] = i;
                     }
                 }
-                VoronoiFT(pf + i * fstrides[1], ishape[0], coor_local.data(), rank, 0, fstrides[0],
-                          fstrides[2], local_f_ptrs.data(), local_g.data());
+                VoronoiFT(pf + i * fstrides[1], ishape[0], coor_local.data(), rank, 0, fstrides[0], fstrides[2],
+                          local_f_ptrs.data(), local_g.data());
             }
             for (int i = 0; i < ishape[0]; i++) {
                 coor_local[0] = i;
-                VoronoiFT(pf + i * fstrides[0], ishape[1], coor_local.data(), rank, 1, fstrides[1],
-                          fstrides[2], local_f_ptrs.data(), local_g.data());
+                VoronoiFT(pf + i * fstrides[0], ishape[1], coor_local.data(), rank, 1, fstrides[1], fstrides[2],
+                          local_f_ptrs.data(), local_g.data());
             }
 
         } else if (rank == 3) {
             int max_dim = std::max(ishape[0], std::max(ishape[1], ishape[2]));
             // use malloc to allocate the memory
-            int *local_f = (int *)malloc( max_dim * 3 * sizeof(int));
-            int *local_g = (int *)malloc( max_dim * sizeof(int));
-            int **local_f_ptrs = (int **)malloc( max_dim * sizeof(int *));
-            int coor_local[3] = {0, 0, 0}; 
+            int *local_f = (int *)malloc(max_dim * 3 * sizeof(int));
+            int *local_g = (int *)malloc(max_dim * sizeof(int));
+            int **local_f_ptrs = (int **)malloc(max_dim * sizeof(int *));
+            int coor_local[3] = {0, 0, 0};
             for (int j = 0; j < max_dim; j++) {
                 local_f_ptrs[j] = local_f + j * 3;
             }
             // printf("cache line allocation time = %f\n", global_timer.stop());
 
-            int direction = 0; 
+            int direction = 0;
             int x_dir = (direction + 1) % 3;
             int y_dir = (direction + 2) % 3;
 
-            for (int i = 0; i < ishape[0]; i++)  // 384 2 
+            for (int i = 0; i < ishape[0]; i++)  // 384 2
             {
-                for (int j = 0; j < ishape[1]; j++)  // 384 1 
+                for (int j = 0; j < ishape[1]; j++)  // 384 1
                 {
                     for (int k = 0; k < ishape[2]; k++) {
                         size_t idx = i * istrides[0] + j * istrides[1] + k * istrides[2];
@@ -316,42 +539,42 @@ class EDT_OMP {
                 }
             }
 
-            for (int i = 0; i < ishape[x_dir]; i++)  // 384 2 
+            for (int i = 0; i < ishape[x_dir]; i++)  // 384 2
             {
-                for (int j = 0; j < ishape[y_dir]; j++)  // 384 1 
+                for (int j = 0; j < ishape[y_dir]; j++)  // 384 1
                 {
                     coor_local[direction] = 0;
                     coor_local[x_dir] = i;
                     coor_local[y_dir] = j;
-                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank, direction, fstrides[direction],
-                              1, local_f_ptrs, local_g);
+                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                              direction, fstrides[direction], 1, local_f_ptrs, local_g);
                 }
             }
-            direction = 1; 
+            direction = 1;
             x_dir = (direction + 1) % 3;
             y_dir = (direction + 2) % 3;
-            
-            for (int i = 0; i < ishape[x_dir]; i++) { //2 
-                for (int j = 0; j < ishape[y_dir]; j++) { // 0 
+
+            for (int i = 0; i < ishape[x_dir]; i++) {      // 2
+                for (int j = 0; j < ishape[y_dir]; j++) {  // 0
                     coor_local[y_dir] = j;
                     coor_local[direction] = 0;
                     coor_local[x_dir] = i;
-                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank, direction, fstrides[direction],
-                              1, local_f_ptrs, local_g );
+                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                              direction, fstrides[direction], 1, local_f_ptrs, local_g);
                 }
             }
-            direction = 2; 
+            direction = 2;
             x_dir = (direction + 1) % 3;
             y_dir = (direction + 2) % 3;
 
             for (int i = 0; i < ishape[x_dir]; i++) {
                 for (int j = 0; j < ishape[y_dir]; j++) {
-                    int cur_thread_id = 0 ;
+                    int cur_thread_id = 0;
                     coor_local[y_dir] = j;
                     coor_local[x_dir] = i;
                     coor_local[direction] = 0;
-                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank, direction, fstrides[direction],
-                              1, local_f_ptrs , local_g );
+                    VoronoiFT(pf + i * fstrides[x_dir] + j * fstrides[y_dir], ishape[direction], coor_local, rank,
+                              direction, fstrides[direction], 1, local_f_ptrs, local_g);
                 }
             }
 
@@ -417,7 +640,7 @@ class EDT_OMP {
         ;
     }
 
-    Distance_and_Index calculate_distance_and_index_(T_int *festures, size_t  *index_strides, int N, int *feature_dims) {
+    Distance_and_Index calculate_distance_and_index_(T_int *festures, size_t *index_strides, int N, int *feature_dims) {
         size_t size = 1;
         for (int i = 0; i < N; i++) {
             size *= feature_dims[i];
@@ -525,7 +748,7 @@ class EDT_OMP {
             index_strides[1] = (size_t)2;
             index_strides[0] = (size_t)dims[1] * 2;
         } else if (N == 3) {
-            strides[1] = (size_t) dims[2];
+            strides[1] = (size_t)dims[2];
             strides[0] = (size_t)dims[1] * dims[2];
             index_strides[2] = (size_t)dims[2];
             index_strides[1] = (size_t)dims[1] * dims[2];
@@ -587,7 +810,7 @@ class EDT_OMP {
             index_strides[0] = (size_t)dims[1] * 2;
             index_strides[1] = (size_t)2;
         } else if (N == 3) {
-            strides[1] =(size_t) dims[2];
+            strides[1] = (size_t)dims[2];
             strides[0] = (size_t)dims[1] * dims[2];
             index_strides[0] = (size_t)dims[1] * dims[2] * 3;
             index_strides[1] = (size_t)dims[2] * 3;
@@ -597,12 +820,12 @@ class EDT_OMP {
         }
         // printf("aux time = %f \n", global_timer.stop());
         global_timer.start();
-        if(num_threads== 1 ) {
+        if (num_threads == 1) {
             ComputeFT2D3D_single(pi, pf, dims, strides.data(), index_strides.data(), N);
-        }
-        else {
+        } else {
             ComputeFT2D3D(pi, pf, dims, strides.data(), index_strides.data(), N);
-        }        edt_time = global_timer.stop();
+        }
+        edt_time = global_timer.stop();
         auto result = calculate_distance_and_index(features, index_strides.data(), N, dims);
         free(features);
         return result;
@@ -639,10 +862,9 @@ class EDT_OMP {
         }
         // printf("aux time = %f \n", global_timer.stop());
         global_timer.start();
-        if(num_threads== 1 ) {
+        if (num_threads == 1) {
             ComputeFT2D3D(pi, pf, dims, strides.data(), index_strides.data(), N);
-        }
-        else {
+        } else {
             ComputeFT2D3D(pi, pf, dims, strides.data(), index_strides.data(), N);
         }
         edt_time = global_timer.stop();

@@ -1,0 +1,1190 @@
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.287596s
+::first edt time time = 2.25753s
+::first sign time = 0.0590053s
+::second boundary time = 0.145751s
+::second edt time = 2.70125s
+::compensation time = 0.0583001s
+compensation time = 5.6268
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.288545s
+::first edt time time = 2.28455s
+::first sign time = 0.0588785s
+::second boundary time = 0.15023s
+::second edt time = 2.73004s
+::compensation time = 0.0580556s
+compensation time = 5.68656
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.286516s
+::first edt time time = 2.25952s
+::first sign time = 0.0588027s
+::second boundary time = 0.1447s
+::second edt time = 2.7033s
+::compensation time = 0.0583787s
+compensation time = 5.628
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.288811s
+::first edt time time = 2.27856s
+::first sign time = 0.0592424s
+::second boundary time = 0.146305s
+::second edt time = 2.74693s
+::compensation time = 0.0585213s
+compensation time = 5.69503
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.290301s
+::first edt time time = 2.26614s
+::first sign time = 0.0588401s
+::second boundary time = 0.142392s
+::second edt time = 2.70523s
+::compensation time = 0.0583097s
+compensation time = 5.6366
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.152191s
+::first edt time time = 1.19217s
+::first sign time = 0.0293796s
+::second boundary time = 0.078647s
+::second edt time = 1.56848s
+::compensation time = 0.0375137s
+compensation time = 3.14767
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.154651s
+::first edt time time = 1.19833s
+::first sign time = 0.0293849s
+::second boundary time = 0.0783213s
+::second edt time = 1.41113s
+::compensation time = 0.0290663s
+compensation time = 2.98041
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.153291s
+::first edt time time = 1.19932s
+::first sign time = 0.0301874s
+::second boundary time = 0.0767477s
+::second edt time = 1.41597s
+::compensation time = 0.0425753s
+compensation time = 3.00418
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.151703s
+::first edt time time = 1.18932s
+::first sign time = 0.0300743s
+::second boundary time = 0.0796845s
+::second edt time = 1.41229s
+::compensation time = 0.0301077s
+compensation time = 2.97347
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.15416s
+::first edt time time = 1.19974s
+::first sign time = 0.0295205s
+::second boundary time = 0.0785928s
+::second edt time = 1.4146s
+::compensation time = 0.0294986s
+compensation time = 2.98709
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0844987s
+::first edt time time = 0.617932s
+::first sign time = 0.0159606s
+::second boundary time = 0.0453772s
+::second edt time = 0.741711s
+::compensation time = 0.0171852s
+compensation time = 1.58649
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0833145s
+::first edt time time = 0.611967s
+::first sign time = 0.016163s
+::second boundary time = 0.0445785s
+::second edt time = 0.721347s
+::compensation time = 0.0147186s
+compensation time = 1.55246
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.084574s
+::first edt time time = 0.610307s
+::first sign time = 0.0158906s
+::second boundary time = 0.0443824s
+::second edt time = 0.713796s
+::compensation time = 0.0144795s
+compensation time = 1.54392
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.08448s
+::first edt time time = 0.617084s
+::first sign time = 0.0159248s
+::second boundary time = 0.0445832s
+::second edt time = 0.759399s
+::compensation time = 0.0176687s
+compensation time = 1.60442
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0828061s
+::first edt time time = 0.621816s
+::first sign time = 0.0159727s
+::second boundary time = 0.0440565s
+::second edt time = 0.726025s
+::compensation time = 0.0186514s
+compensation time = 1.57405
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0490238s
+::first edt time time = 0.323436s
+::first sign time = 0.00819284s
+::second boundary time = 0.0247656s
+::second edt time = 0.38029s
+::compensation time = 0.00717968s
+compensation time = 0.845244
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0489836s
+::first edt time time = 0.32252s
+::first sign time = 0.00829649s
+::second boundary time = 0.0255803s
+::second edt time = 0.382156s
+::compensation time = 0.00716956s
+compensation time = 0.847425
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0475551s
+::first edt time time = 0.319631s
+::first sign time = 0.00812743s
+::second boundary time = 0.0244983s
+::second edt time = 0.380993s
+::compensation time = 0.00717137s
+compensation time = 0.840203
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0475195s
+::first edt time time = 0.321995s
+::first sign time = 0.00814112s
+::second boundary time = 0.0249078s
+::second edt time = 0.380312s
+::compensation time = 0.00715652s
+compensation time = 0.841774
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0488726s
+::first edt time time = 0.319383s
+::first sign time = 0.00817425s
+::second boundary time = 0.0243929s
+::second edt time = 0.38212s
+::compensation time = 0.00716392s
+compensation time = 0.841631
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0290225s
+::first edt time time = 0.164635s
+::first sign time = 0.00451597s
+::second boundary time = 0.0152243s
+::second edt time = 0.19378s
+::compensation time = 0.00371046s
+compensation time = 0.459172
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0288291s
+::first edt time time = 0.166848s
+::first sign time = 0.00456647s
+::second boundary time = 0.0148206s
+::second edt time = 0.194326s
+::compensation time = 0.00364954s
+compensation time = 0.46278
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0287392s
+::first edt time time = 0.163198s
+::first sign time = 0.00451899s
+::second boundary time = 0.0146266s
+::second edt time = 0.193473s
+::compensation time = 0.00366239s
+compensation time = 0.45726
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0291019s
+::first edt time time = 0.174994s
+::first sign time = 0.00470458s
+::second boundary time = 0.0148384s
+::second edt time = 0.204369s
+::compensation time = 0.00360535s
+compensation time = 0.481133
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0287437s
+::first edt time time = 0.163355s
+::first sign time = 0.00454426s
+::second boundary time = 0.0148183s
+::second edt time = 0.194359s
+::compensation time = 0.00367268s
+compensation time = 0.458471
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0202583s
+::first edt time time = 0.0953375s
+::first sign time = 0.00296876s
+::second boundary time = 0.00971161s
+::second edt time = 0.108193s
+::compensation time = 0.0034524s
+compensation time = 0.288057
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.020572s
+::first edt time time = 0.094695s
+::first sign time = 0.00310629s
+::second boundary time = 0.00973707s
+::second edt time = 0.112467s
+::compensation time = 0.00346579s
+compensation time = 0.292706
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0202941s
+::first edt time time = 0.0953688s
+::first sign time = 0.00302274s
+::second boundary time = 0.00986656s
+::second edt time = 0.107937s
+::compensation time = 0.00357058s
+compensation time = 0.287793
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0206285s
+::first edt time time = 0.0947229s
+::first sign time = 0.00297408s
+::second boundary time = 0.00981385s
+::second edt time = 0.108674s
+::compensation time = 0.00354419s
+compensation time = 0.287845
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0203464s
+::first edt time time = 0.0949905s
+::first sign time = 0.00306511s
+::second boundary time = 0.00981332s
+::second edt time = 0.108671s
+::compensation time = 0.0034453s
+compensation time = 0.287508
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0154845s
+::first edt time time = 0.0684793s
+::first sign time = 0.00286973s
+::second boundary time = 0.00728243s
+::second edt time = 0.0785256s
+::compensation time = 0.00332251s
+compensation time = 0.22187
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0155379s
+::first edt time time = 0.0659885s
+::first sign time = 0.00282316s
+::second boundary time = 0.00697368s
+::second edt time = 0.0759609s
+::compensation time = 0.00336088s
+compensation time = 0.21716
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0154045s
+::first edt time time = 0.0664694s
+::first sign time = 0.00273612s
+::second boundary time = 0.00674954s
+::second edt time = 0.0761895s
+::compensation time = 0.00337937s
+compensation time = 0.218052
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0156364s
+::first edt time time = 0.0686743s
+::first sign time = 0.00286291s
+::second boundary time = 0.00692495s
+::second edt time = 0.0787624s
+::compensation time = 0.0033697s
+compensation time = 0.221862
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971
+max: 39.558197, min: -53.022568
+absolute eb: 4.629038E-01
+frequent quantization index = -3
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.46
+Max relative error = 0.005
+Max pw relative error = 1
+PSNR = 50.812437, NRMSE= 0.002879904823
+normError = 1333.118955, normErr_norm = 0.028030
+acEff=0.999584
+SSE=1777206.147398
+MSE=0.0710882459
+nw = 2867423
+SSIM = 0.909984
+zero count = 1363051
+zero ratio = 0.054522
+::first boundary time time = 0.0154744s
+::first edt time time = 0.0664047s
+::first sign time = 0.00289229s
+::second boundary time = 0.00665149s
+::second edt time = 0.0763119s
+::compensation time = 0.00336579s
+compensation time = 0.217867
+Min=-53.0225677490234375, Max=39.558197021484375, range=92.5807647705078125
+Max absolute error = 0.86
+Max relative error = 0.0093
+Max pw relative error = 1.7E+05
+PSNR = 54.498036, NRMSE= 0.001884074951
+normError = 872.145499, normErr_norm = 0.018362
+acEff=0.999822
+SSE=760637.771765
+MSE=0.0304255109
+nw = 2867423
+SSIM = 0.969971

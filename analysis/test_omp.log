@@ -1,0 +1,14 @@
+Testing with OMP_NUM_THREADS=1
+  Iteration 1
+Testing with OMP_NUM_THREADS=2
+  Iteration 1
+Testing with OMP_NUM_THREADS=4
+  Iteration 1
+Testing with OMP_NUM_THREADS=8
+  Iteration 1
+Testing with OMP_NUM_THREADS=16
+  Iteration 1
+Testing with OMP_NUM_THREADS=32
+  Iteration 1
+Testing with OMP_NUM_THREADS=64
+  Iteration 1

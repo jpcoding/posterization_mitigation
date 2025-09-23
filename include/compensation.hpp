@@ -375,20 +375,25 @@ class Compensation {
     }
 
     std::vector<T_data> get_compensation_map_3d() {
-
+        // auto timer = Timer();
+        // timer.start();
         auto bounday_and_sign = get_boundary_and_sign_map_3d(quant_index, N, dims.data(), edt_thread_num);
+        // timer.stop("::first boundary time");
         auto boundary_map = std::get<0>(bounday_and_sign);
         auto sign_map = std::get<1>(bounday_and_sign);
         char edge_tag = 1;
-        auto timer = Timer();
+        
 
-        timer.start();
+        
         auto edt_omp = PM2::EDT_OMP<T_data, int>();
+        // timer.start();
         edt_omp.set_num_threads(edt_thread_num);
         auto edt_result = edt_omp.NI_EuclideanFeatureTransform(boundary_map.data(), N, dims.data(), edt_thread_num);
+        // timer.stop("::first edt time");
         auto distance_array = std::move(edt_result.distance);
         auto indexes = std::move(edt_result.indexes);
 
+        // timer.start();
 #pragma omp parallel for num_threads(edt_thread_num)
         for (size_t i = 0; i < input_size; i++) {
             if (boundary_map[i] != edge_tag)  // non-boundary points ·
@@ -396,13 +401,15 @@ class Compensation {
                 sign_map[i] = sign_map[indexes[i]];
             }
         }
+        // timer.stop("::first sign");
 
         // dump the sign map
 
         // get the second boundry map
+        // timer.start();
         auto boundary_map2 = get_boundary(sign_map.data(), N, dims.data(), edt_thread_num);
 
-
+        // timer.stop("::second boundary");
 #pragma omp parallel for num_threads(edt_thread_num)
         for (int i = 0; i < input_size; i++) {
             if (boundary_map2[i] == edge_tag && boundary_map[i] == edge_tag) {
@@ -429,11 +436,13 @@ class Compensation {
             return std::sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) + (z1 - z2) * (z1 - z2));
         };
 
-        timer.start();
+        // timer.start();
         auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform(boundary_map2.data(), N, dims.data(), edt_thread_num);
+
+        // timer.stop("::second edt");
         auto distance_array2 = std::move(edt_result2.distance);
         auto indexes2 = std::move(edt_result2.indexes);
-
+// timer.start();
         if (use_rbf == true) {
 #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
@@ -471,6 +480,7 @@ class Compensation {
                 compensation_map[i] = sign * magnitude * comepnsation_value;
             }
         }
+    // timer.stop("::compensation");
 
         return compensation_map;
     }

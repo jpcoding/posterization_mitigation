@@ -60,7 +60,7 @@ inline std::vector<char> get_boundary_3d(T* quant_index, int N, int* dims, int n
     std::vector<char> boundary;
     size_t n = dims[0] * dims[1] * dims[2];
     boundary.resize(n, 0);
-    #pragma omp parallel for collapse(3) num_threads(num_threads)
+    #pragma omp parallel for collapse(1) num_threads(num_threads)
     for (size_t i = 1; i < dims[0] - 1; i++) {
         for (size_t j = 1; j < dims[1] - 1; j++) {
             for (size_t k = 1; k < dims[2] - 1; k++) {
@@ -187,7 +187,7 @@ inline std::tuple<std::vector<char>, std::vector<char>> get_boundary_and_sign_ma
     // int neighbor_quant[6];
     // char signs[6]; 
 
-    #pragma omp parallel for collapse(3) num_threads(num_threads)
+    #pragma omp parallel for collapse(1) num_threads(num_threads)
     for (size_t i = 1; i < dims[0] - 1; i++) {
         for (size_t j = 1; j < dims[1] - 1; j++) {
             for (size_t k = 1; k < dims[2] - 1; k++) {
