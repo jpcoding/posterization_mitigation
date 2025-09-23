@@ -34,3 +34,5 @@ target_link_libraries(test_mpi_ranks OpenMP::OpenMP_CXX MPI::MPI_CXX )
 
 add_executable(test_embassingly_parallel  test_embassingly_parallel.cpp)
 target_link_libraries(test_embassingly_parallel  MPI::MPI_CXX OpenMP::OpenMP_CXX)
+
+add_executable(test_frequent test_frequent.cpp)

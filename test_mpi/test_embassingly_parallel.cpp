@@ -24,6 +24,9 @@
 
 namespace SZ = SZ3;
 
+
+
+
 int main(int argc, char** argv) {
     int mpi_rank, size;
     MPI_Comm cart_comm;
@@ -141,9 +144,11 @@ int main(int argc, char** argv) {
     double time = MPI_Wtime();
     if (1) {
         for (int i = 0; i < block_size; i++) {
+
             quant_inds[i] = quantizer.quantize_and_overwrite(data[i], 0) - 32768;
             if (quant_inds[i] == 0) local_zero_count++;
         }
+
     }
     MPI_Barrier(cart_comm);
     time = MPI_Wtime() - time;

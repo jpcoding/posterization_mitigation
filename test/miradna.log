@@ -1,0 +1,168 @@
+Running test with 1 threads
+max: 2.297243, min: -2.214255
+absolute eb: 0.004511
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0045
+Max relative error = 0.001
+Max pw relative error = 1
+PSNR = 65.146515, NRMSE= 0.0005529352361
+normError = 15.326616, normErr_norm = 0.011699
+acEff=0.999932
+SSE=234.905144
+MSE=0.0000062229
+zero count = 12789312
+zero ratio = 0.338801
+compensation time = 6.16498
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0085
+Max relative error = 0.0019
+Max pw relative error = 5.6E+06
+PSNR = 69.127889, NRMSE= 0.0003496274602
+normError = 9.691199, normErr_norm = 0.007397
+acEff=0.999973
+SSE=93.919347
+MSE=0.0000024880
+Running test with 2 threads
+max: 2.297243, min: -2.214255
+absolute eb: 0.004511
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0045
+Max relative error = 0.001
+Max pw relative error = 1
+PSNR = 65.146515, NRMSE= 0.0005529352361
+normError = 15.326616, normErr_norm = 0.011699
+acEff=0.999932
+SSE=234.905144
+MSE=0.0000062229
+zero count = 12789312
+zero ratio = 0.338801
+compensation time = 4.31863
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0085
+Max relative error = 0.0019
+Max pw relative error = 5.6E+06
+PSNR = 69.127889, NRMSE= 0.0003496274602
+normError = 9.691199, normErr_norm = 0.007397
+acEff=0.999973
+SSE=93.919347
+MSE=0.0000024880
+Running test with 4 threads
+max: 2.297243, min: -2.214255
+absolute eb: 0.004511
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0045
+Max relative error = 0.001
+Max pw relative error = 1
+PSNR = 65.146515, NRMSE= 0.0005529352361
+normError = 15.326616, normErr_norm = 0.011699
+acEff=0.999932
+SSE=234.905144
+MSE=0.0000062229
+zero count = 12789312
+zero ratio = 0.338801
+compensation time = 2.56433
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0085
+Max relative error = 0.0019
+Max pw relative error = 5.6E+06
+PSNR = 69.127889, NRMSE= 0.0003496274602
+normError = 9.691199, normErr_norm = 0.007397
+acEff=0.999973
+SSE=93.919347
+MSE=0.0000024880
+Running test with 8 threads
+max: 2.297243, min: -2.214255
+absolute eb: 0.004511
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0045
+Max relative error = 0.001
+Max pw relative error = 1
+PSNR = 65.146515, NRMSE= 0.0005529352361
+normError = 15.326616, normErr_norm = 0.011699
+acEff=0.999932
+SSE=234.905144
+MSE=0.0000062229
+zero count = 12789312
+zero ratio = 0.338801
+compensation time = 1.49808
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0085
+Max relative error = 0.0019
+Max pw relative error = 5.6E+06
+PSNR = 69.127889, NRMSE= 0.0003496274602
+normError = 9.691199, normErr_norm = 0.007397
+acEff=0.999973
+SSE=93.919347
+MSE=0.0000024880
+Running test with 16 threads
+max: 2.297243, min: -2.214255
+absolute eb: 0.004511
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0045
+Max relative error = 0.001
+Max pw relative error = 1
+PSNR = 65.146515, NRMSE= 0.0005529352361
+normError = 15.326616, normErr_norm = 0.011699
+acEff=0.999932
+SSE=234.905144
+MSE=0.0000062229
+zero count = 12789312
+zero ratio = 0.338801
+compensation time = 1.17685
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0085
+Max relative error = 0.0019
+Max pw relative error = 5.6E+06
+PSNR = 69.127889, NRMSE= 0.0003496274602
+normError = 9.691199, normErr_norm = 0.007397
+acEff=0.999973
+SSE=93.919347
+MSE=0.0000024880
+Running test with 32 threads
+max: 2.297243, min: -2.214255
+absolute eb: 0.004511
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0045
+Max relative error = 0.001
+Max pw relative error = 1
+PSNR = 65.146515, NRMSE= 0.0005529352361
+normError = 15.326616, normErr_norm = 0.011699
+acEff=0.999932
+SSE=234.905144
+MSE=0.0000062229
+zero count = 12789312
+zero ratio = 0.338801
+compensation time = 0.87829
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0085
+Max relative error = 0.0019
+Max pw relative error = 5.6E+06
+PSNR = 69.127889, NRMSE= 0.0003496274602
+normError = 9.691199, normErr_norm = 0.007397
+acEff=0.999973
+SSE=93.919347
+MSE=0.0000024880
+Running test with 64 threads
+max: 2.297243, min: -2.214255
+absolute eb: 0.004511
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0045
+Max relative error = 0.001
+Max pw relative error = 1
+PSNR = 65.146515, NRMSE= 0.0005529352361
+normError = 15.326616, normErr_norm = 0.011699
+acEff=0.999932
+SSE=234.905144
+MSE=0.0000062229
+zero count = 12789312
+zero ratio = 0.338801
+compensation time = 1.02773
+Min=-2.2142553329467773438, Max=2.2972428798675537109, range=4.5114982128143310547
+Max absolute error = 0.0085
+Max relative error = 0.0019
+Max pw relative error = 5.6E+06
+PSNR = 69.127889, NRMSE= 0.0003496274602
+normError = 9.691199, normErr_norm = 0.007397
+acEff=0.999973
+SSE=93.919347
+MSE=0.0000024880
