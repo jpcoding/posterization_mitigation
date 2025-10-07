@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
     std::string compensation_file;
     bool use_rbf;
     bool no_ssim = false;
+    double compensation_factor = 0.9;
     app.add_option("-N", N, "number of dimensions")->required();
     dims.resize(N, 0);
     app.add_option("-d", dims, "dimensions")->required();
@@ -54,6 +55,7 @@ int main(int argc, char **argv) {
     app.add_option("-t", num_threads, "number of threads")->default_val(1)->check(CLI::Range(1, 256));
     app.add_option("--use_rbf", use_rbf, "use rbf")->default_val(false);
     app.add_option("--no_ssim", no_ssim, "do not calculate ssim")->default_val(false);
+    app.add_option("--eta", compensation_factor, "compensation_factor")-> default_val(0.9);
     CLI11_PARSE(app, argc, argv);
 
     size_t data_size = 1;
@@ -158,7 +160,7 @@ int main(int argc, char **argv) {
         printf("too many zeros, will not compensate\n");
         // return 0;
     }
-    double compensation_factor = 0.9;
+    
     auto timer = Timer();
     timer.start();
     if (operation) {
