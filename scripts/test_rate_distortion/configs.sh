@@ -1,0 +1,4 @@
+cusz_path = "cusz_path"
+cuszp_path = "cuszp_path"
+test_quantize_and_edt_path = "../../install/bin/test/test_quantize_and_edt" 
+direct_quantize_path = "../../install/bin/test/direct_quantize"
