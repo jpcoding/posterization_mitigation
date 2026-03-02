@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dir', required=True, help='Subfolder containing opt_*.out files')
+parser.add_argument('--dir', default='blocking', help='Subfolder containing opt_*.out files')
 args = parser.parse_args()
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
