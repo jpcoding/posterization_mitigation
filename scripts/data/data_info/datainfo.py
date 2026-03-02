@@ -65,6 +65,9 @@ s3d = DataInfo(f'{data_root}/s3d_500x500x500/', '.f32')
 s3d.set_dims([500,500,500])
 s3d.name = 's3d'
 
+cesm = DataInfo(f'{data_root}/cesm_3600x1800/', '.f32')
+cesm.set_dims([1800,3600])
+cesm.name = 'cesm'
 
 DataSets={}
 DataSets['miranda'] = miranda
@@ -72,5 +75,5 @@ DataSets['hurricane'] = hurricane
 DataSets['nyx'] = nyx
 DataSets['jhtdb_pressure'] = jhtdb_pressure
 DataSets['s3d'] = s3d
-    
+DataSets['cesm'] = cesm
     

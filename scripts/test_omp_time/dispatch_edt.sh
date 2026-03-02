@@ -1,4 +1,4 @@
-dirs=(  'nyx'  '3sd'    'miranda'  'hurricane' )
+dirs=(  'nyx'  '3sd'    'cesm'  'hurricane' )
 for i in "${dirs[@]}"
 do
     echo "Running $i"
