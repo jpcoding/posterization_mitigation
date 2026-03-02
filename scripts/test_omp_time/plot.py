@@ -4,14 +4,14 @@ import matplotlib
 # get rid of type3 fonts 
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
-datastes = [  'miranda', 'hurricane' ,'nyx' ,'jhtdb_pressure'] 
-data_szie = [ 384*384*256, 500*500*100, 512**3, 512**3 ]
+datastes = [  'miranda', 'hurricane' ,'nyx' ,'s3d'] 
+data_szie = [ 384*384*256, 500*500*100, 512**3, 500**3 ]
 results = {}
 for dataset in datastes:
     results[dataset] = (np.load("time_array_{}.npy".format(dataset)))
 
-datastes = [  'miranda', 'hurricane' ,'nyx' ,'jhtdb_pressure'] 
-dataset_titles = ['Miranda', 'Hurricane' ,'NYX' ,'JHTDB-Small'] 
+datastes = [  'miranda', 'hurricane' ,'nyx' ,'s3d'] 
+dataset_titles = ['Miranda', 'Hurricane' ,'NYX' ,'S3D'] 
 figs,axs = plt.subplots(2, 2, figsize=(6, 6), constrained_layout=True)
 cores_ticks = [1, 2, 4, 8, 16, 32,64] 
 # cores = np.arange(1, len(cores_ticks)+1)

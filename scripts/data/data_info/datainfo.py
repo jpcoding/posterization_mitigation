@@ -61,12 +61,16 @@ jhtdb_pressure.set_dims([512,512,512])
 jhtdb_pressure.name = 'jhtdb_pressure'
 
 
+s3d = DataInfo(f'{data_root}/s3d_500x500x500/', '.f32')
+s3d.set_dims([500,500,500])
+s3d.name = 's3d'
+
 
 DataSets={}
 DataSets['miranda'] = miranda
 DataSets['hurricane'] = hurricane
 DataSets['nyx'] = nyx
 DataSets['jhtdb_pressure'] = jhtdb_pressure
+DataSets['s3d'] = s3d
     
-        
     
