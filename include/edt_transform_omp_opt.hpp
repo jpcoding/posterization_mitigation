@@ -37,6 +37,11 @@ class EDT_OMP_Opt {
         std::unique_ptr<size_t[]>     indexes;
     };
 
+    struct Distance_and_Packed_Index {
+        std::unique_ptr<T_distance[]> distance;
+        std::unique_ptr<uint32_t[]>   indexes;
+    };
+
     void set_num_threads(int n) { num_threads = n; }
 
     // Full result: distance + nearest-feature flat index.
@@ -48,6 +53,19 @@ class EDT_OMP_Opt {
         if (max_dim <= 127)   return edt_full<int8_t> (input, dims);
         if (max_dim <= 32767) return edt_full<int16_t>(input, dims);
                               return edt_full<int32_t>(input, dims);
+    }
+
+    // Full result: distance + packed nearest-feature index.
+    // Packing uses 10 bits per coordinate: (x<<20)|(y<<10)|z for dims[0],dims[1],dims[2].
+    // Use when all dimensions fit in 10 bits; this halves index bandwidth vs size_t.
+    Distance_and_Packed_Index NI_EuclideanFeatureTransform_packed(
+        char *input, int N, int *dims, int /*unused*/ = 1) {
+        if (N != 3) return {};
+        int max_dim = *std::max_element(dims, dims + N);
+        if (max_dim > 1023) return {};
+        if (max_dim <= 127)   return edt_full_packed<int8_t> (input, dims);
+        if (max_dim <= 32767) return edt_full_packed<int16_t>(input, dims);
+                              return edt_full_packed<int32_t>(input, dims);
     }
 
     // Distance-only: no index array allocated or computed.
@@ -223,6 +241,25 @@ class EDT_OMP_Opt {
         }
     }
 
+    template <typename TCoord>
+    void compute_distances_packed(const TCoord *features, const int *dims,
+                                  T_distance *out_dist, uint32_t *out_idx) {
+        #pragma omp parallel for collapse(2) num_threads(num_threads)
+        for (int i = 0; i < dims[0]; i++) {
+            for (int j = 0; j < dims[1]; j++) {
+                for (int k = 0; k < dims[2]; k++) {
+                    size_t gi = (size_t)i * dims[1] * dims[2] + (size_t)j * dims[2] + k;
+                    int x = (int)features[gi * 3    ];
+                    int y = (int)features[gi * 3 + 1];
+                    int z = (int)features[gi * 3 + 2];
+                    double dist = (double)(x-i)*(x-i) + (double)(y-j)*(y-j) + (double)(z-k)*(z-k);
+                    out_dist[gi] = (T_distance)std::sqrt(dist);
+                    out_idx[gi] = ((uint32_t)x << 20) | ((uint32_t)y << 10) | (uint32_t)z;
+                }
+            }
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Common setup: allocate features buffer and compute fstrides for 3D AoS.
     // fstrides[d] = TCoord elements between adjacent voxels along dim d.
@@ -259,6 +296,27 @@ class EDT_OMP_Opt {
             (size_t *)malloc(sz * sizeof(size_t)));
         compute_distances<TCoord>(features, dims,
                                   result.distance.get(), result.indexes.get());
+        free(features);
+        return result;
+    }
+
+    template <typename TCoord>
+    Distance_and_Packed_Index edt_full_packed(char *input, int *dims) {
+        size_t sz = (size_t)dims[0] * dims[1] * dims[2];
+        TCoord *features = (TCoord *)malloc(sz * 3 * sizeof(TCoord));
+
+        size_t istrides[3], fstrides[4];
+        make_strides(dims, istrides, fstrides);
+        int ishape[3] = { dims[0], dims[1], dims[2] };
+        ComputeFT3D<TCoord>(input, features, ishape, istrides, fstrides);
+
+        Distance_and_Packed_Index result;
+        result.distance = std::unique_ptr<T_distance[]>(
+            (T_distance *)malloc(sz * sizeof(T_distance)));
+        result.indexes = std::unique_ptr<uint32_t[]>(
+            (uint32_t *)malloc(sz * sizeof(uint32_t)));
+        compute_distances_packed<TCoord>(features, dims,
+                                         result.distance.get(), result.indexes.get());
         free(features);
         return result;
     }

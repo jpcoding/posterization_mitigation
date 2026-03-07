@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -392,17 +394,35 @@ class Compensation {
         // halving or quartering the features buffer bandwidth vs the old EDT_OMP.
         auto edt_omp = PM2::EDT_OMP_Opt<T_data>();
         edt_omp.set_num_threads(edt_thread_num);
-        auto edt_result = edt_omp.NI_EuclideanFeatureTransform(boundary_map.data(), N, dims.data(), edt_thread_num);
-        // timer.stop("::first edt time");
-        auto distance_array = std::move(edt_result.distance);
-        auto indexes = std::move(edt_result.indexes);
+        const bool use_packed_indexes = (*std::max_element(dims.begin(), dims.end()) <= 1023);
+        std::unique_ptr<T_data[]> distance_array;
+        std::unique_ptr<size_t[]> indexes;
+        std::unique_ptr<uint32_t[]> packed_indexes;
+        if (use_packed_indexes) {
+            auto edt_result = edt_omp.NI_EuclideanFeatureTransform_packed(
+                boundary_map.data(), N, dims.data(), edt_thread_num);
+            distance_array = std::move(edt_result.distance);
+            packed_indexes = std::move(edt_result.indexes);
+        } else {
+            auto edt_result = edt_omp.NI_EuclideanFeatureTransform(
+                boundary_map.data(), N, dims.data(), edt_thread_num);
+            distance_array = std::move(edt_result.distance);
+            indexes = std::move(edt_result.indexes);
+        }
+        auto packed_to_flat = [this](uint32_t packed) -> size_t {
+            size_t x = (size_t)((packed >> 20) & 0x3FFu);
+            size_t y = (size_t)((packed >> 10) & 0x3FFu);
+            size_t z = (size_t)(packed & 0x3FFu);
+            return x * (size_t)dims[1] * dims[2] + y * dims[2] + z;
+        };
 
         // timer.start();
 #pragma omp parallel for num_threads(edt_thread_num)
         for (size_t i = 0; i < input_size; i++) {
             if (boundary_map[i] != edge_tag)  // non-boundary points ·
             {
-                sign_map[i] = sign_map[indexes[i]];
+                sign_map[i] = use_packed_indexes ? sign_map[packed_to_flat(packed_indexes[i])]
+                                                 : sign_map[indexes[i]];
             }
         }
         // timer.stop("::first sign");
@@ -432,6 +452,15 @@ class Compensation {
             int y2 = (j / dims[2]) % dims[1];
             int z2 = j % dims[2];
             return std::sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) + (z1 - z2) * (z1 - z2));
+        };
+        auto cal_distance_packed = [](uint32_t a, uint32_t b) -> double {
+            int ax = (int)((a >> 20) & 0x3FFu);
+            int ay = (int)((a >> 10) & 0x3FFu);
+            int az = (int)(a & 0x3FFu);
+            int bx = (int)((b >> 20) & 0x3FFu);
+            int by = (int)((b >> 10) & 0x3FFu);
+            int bz = (int)(b & 0x3FFu);
+            return std::sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by) + (az - bz) * (az - bz));
         };
 
         if (downsample_edt_round2 && !use_rbf) {
@@ -498,15 +527,28 @@ class Compensation {
             }
         } else if (use_rbf) {
             // --- Full-resolution EDT round 2, RBF path (needs indexes2 for cal_distance) ---
-            auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform(boundary_map2.data(), N, dims.data(), edt_thread_num);
-            auto distance_array2 = std::move(edt_result2.distance);
-            auto indexes2        = std::move(edt_result2.indexes);
+            std::unique_ptr<T_data[]> distance_array2;
+            std::unique_ptr<size_t[]> indexes2;
+            std::unique_ptr<uint32_t[]> packed_indexes2;
+            if (use_packed_indexes) {
+                auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform_packed(
+                    boundary_map2.data(), N, dims.data(), edt_thread_num);
+                distance_array2 = std::move(edt_result2.distance);
+                packed_indexes2 = std::move(edt_result2.indexes);
+            } else {
+                auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform(
+                    boundary_map2.data(), N, dims.data(), edt_thread_num);
+                distance_array2 = std::move(edt_result2.distance);
+                indexes2 = std::move(edt_result2.indexes);
+            }
 #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 double distance1 = distance_array[i] + 0.5;
                 double distance2 = distance_array2[i] + 0.5;
-                char sign = sign_map[indexes[i]];
-                double d0 = cal_distance(indexes[i], indexes2[i]);
+                char sign = use_packed_indexes ? sign_map[packed_to_flat(packed_indexes[i])]
+                                               : sign_map[indexes[i]];
+                double d0 = use_packed_indexes ? cal_distance_packed(packed_indexes[i], packed_indexes2[i])
+                                               : cal_distance(indexes[i], indexes2[i]);
                 double a = rbf(0);
                 double b = rbf(d0);
                 double w0 = a / (a * a - b * b);
