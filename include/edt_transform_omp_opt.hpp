@@ -23,6 +23,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <omp.h>
 #include <vector>
@@ -41,6 +42,12 @@ class EDT_OMP_Opt {
         std::unique_ptr<T_distance[]> distance;
         std::unique_ptr<uint32_t[]>   indexes;
     };
+
+    EDT_OMP_Opt() = default;
+    ~EDT_OMP_Opt() { release_workspace(); }
+
+    EDT_OMP_Opt(const EDT_OMP_Opt &) = delete;
+    EDT_OMP_Opt &operator=(const EDT_OMP_Opt &) = delete;
 
     void set_num_threads(int n) { num_threads = n; }
 
@@ -68,6 +75,20 @@ class EDT_OMP_Opt {
                               return edt_full_packed<int32_t>(input, dims);
     }
 
+    // Full result: distance + flat uint32 nearest-feature index.
+    // Use when total voxel count fits in uint32_t and downstream mostly wants
+    // direct nearest-voxel lookup instead of coordinate decode.
+    Distance_and_Packed_Index NI_EuclideanFeatureTransform_flat32(
+        char *input, int N, int *dims, int /*unused*/ = 1) {
+        if (N != 3) return {};
+        size_t total = (size_t)dims[0] * dims[1] * dims[2];
+        if (total > std::numeric_limits<uint32_t>::max()) return {};
+        int max_dim = *std::max_element(dims, dims + N);
+        if (max_dim <= 127)   return edt_full_flat32<int8_t> (input, dims);
+        if (max_dim <= 32767) return edt_full_flat32<int16_t>(input, dims);
+                              return edt_full_flat32<int32_t>(input, dims);
+    }
+
     // Distance-only: no index array allocated or computed.
     // Use for EDT round 2 in the IDW path where indexes are never consumed.
     std::unique_ptr<T_distance[]> NI_EuclideanFeatureTransform_dist_only(
@@ -82,6 +103,66 @@ class EDT_OMP_Opt {
    private:
     int num_threads = 1;
     static constexpr char edge_tag = 1;
+    void *feature_storage = nullptr;
+    size_t feature_capacity_bytes = 0;
+    int *scratch_f = nullptr;
+    int *scratch_g = nullptr;
+    int *scratch_coor = nullptr;
+    int scratch_max_dim = 0;
+    int scratch_threads = 0;
+    std::vector<int *> scratch_f_rows;
+
+    void release_workspace() {
+        free(feature_storage);
+        free(scratch_f);
+        free(scratch_g);
+        free(scratch_coor);
+        feature_storage = nullptr;
+        scratch_f = nullptr;
+        scratch_g = nullptr;
+        scratch_coor = nullptr;
+        feature_capacity_bytes = 0;
+        scratch_max_dim = 0;
+        scratch_threads = 0;
+        scratch_f_rows.clear();
+    }
+
+    template <typename TCoord>
+    TCoord *ensure_feature_storage(size_t voxel_count) {
+        size_t bytes = voxel_count * 3 * sizeof(TCoord);
+        if (bytes > feature_capacity_bytes) {
+            free(feature_storage);
+            feature_storage = malloc(bytes);
+            feature_capacity_bytes = bytes;
+        }
+        return static_cast<TCoord *>(feature_storage);
+    }
+
+    void ensure_thread_workspace(int max_dim) {
+        int threads = std::max(1, num_threads);
+        if (max_dim <= scratch_max_dim && threads <= scratch_threads && scratch_f != nullptr) {
+            return;
+        }
+
+        free(scratch_f);
+        free(scratch_g);
+        free(scratch_coor);
+
+        scratch_max_dim = std::max(max_dim, scratch_max_dim);
+        scratch_threads = std::max(threads, scratch_threads);
+
+        scratch_f = static_cast<int *>(malloc((size_t)scratch_threads * scratch_max_dim * 3 * sizeof(int)));
+        scratch_g = static_cast<int *>(malloc((size_t)scratch_threads * scratch_max_dim * sizeof(int)));
+        scratch_coor = static_cast<int *>(malloc((size_t)scratch_threads * 3 * sizeof(int)));
+
+        scratch_f_rows.resize((size_t)scratch_threads * scratch_max_dim);
+        for (int t = 0; t < scratch_threads; t++) {
+            for (int j = 0; j < scratch_max_dim; j++) {
+                scratch_f_rows[(size_t)t * scratch_max_dim + j] =
+                    scratch_f + (((size_t)t * scratch_max_dim + j) * 3);
+            }
+        }
+    }
 
     // -----------------------------------------------------------------------
     // VoronoiFT templated on coordinate storage type TCoord.
@@ -173,24 +254,7 @@ class EDT_OMP_Opt {
         }
 
         int max_dim = std::max({ishape[0], ishape[1], ishape[2]});
-        std::vector<int *> lf(num_threads), lg(num_threads);
-        std::vector<int **> lf_ptrs(num_threads);
-        std::vector<int *> lcoor(num_threads);
-        for (int t = 0; t < num_threads; t++) {
-            lf[t]      = (int *)aligned_alloc(64, max_dim * 3 * sizeof(int));
-            lg[t]      = (int *)aligned_alloc(64, max_dim * sizeof(int));
-            lcoor[t]   = (int *)aligned_alloc(64, 3 * sizeof(int));
-            lf_ptrs[t] = (int **)malloc(max_dim * sizeof(int *));
-            for (int j = 0; j < max_dim; j++) lf_ptrs[t][j] = lf[t] + j * 3;
-        }
-        // NUMA first-touch
-        #pragma omp parallel num_threads(num_threads)
-        {
-            int tid = omp_get_thread_num();
-            std::fill(lf[tid], lf[tid] + max_dim * 3, 0);
-            std::fill(lg[tid], lg[tid] + max_dim, 0);
-            std::fill(lcoor[tid], lcoor[tid] + 3, 0);
-        }
+        ensure_thread_workspace(max_dim);
 
         for (int direction = 0; direction < 3; direction++) {
             int x_dir = (direction + 1) % 3;
@@ -199,19 +263,17 @@ class EDT_OMP_Opt {
             for (int i = 0; i < ishape[x_dir]; i++) {
                 for (int j = 0; j < ishape[y_dir]; j++) {
                     int tid = omp_get_thread_num();
-                    lcoor[tid][direction] = 0;
-                    lcoor[tid][x_dir]     = i;
-                    lcoor[tid][y_dir]     = j;
+                    int *coor = scratch_coor + tid * 3;
+                    coor[direction] = 0;
+                    coor[x_dir]     = i;
+                    coor[y_dir]     = j;
                     VoronoiFT<TCoord>(
                         pf + i * fstrides[x_dir] + j * fstrides[y_dir],
-                        ishape[direction], lcoor[tid], 3, direction,
-                        fstrides[direction], lf_ptrs[tid], lg[tid]);
+                        ishape[direction], coor, 3, direction,
+                        fstrides[direction], scratch_f_rows.data() + (size_t)tid * scratch_max_dim,
+                        scratch_g + (size_t)tid * scratch_max_dim);
                 }
             }
-        }
-
-        for (int t = 0; t < num_threads; t++) {
-            free(lf[t]); free(lg[t]); free(lf_ptrs[t]); free(lcoor[t]);
         }
     }
 
@@ -260,6 +322,26 @@ class EDT_OMP_Opt {
         }
     }
 
+    template <typename TCoord>
+    void compute_distances_flat32(const TCoord *features, const int *dims,
+                                  T_distance *out_dist, uint32_t *out_idx) {
+        size_t d1xd2 = (size_t)dims[1] * dims[2];
+        #pragma omp parallel for collapse(2) num_threads(num_threads)
+        for (int i = 0; i < dims[0]; i++) {
+            for (int j = 0; j < dims[1]; j++) {
+                for (int k = 0; k < dims[2]; k++) {
+                    size_t gi = (size_t)i * d1xd2 + (size_t)j * dims[2] + k;
+                    int x = (int)features[gi * 3    ];
+                    int y = (int)features[gi * 3 + 1];
+                    int z = (int)features[gi * 3 + 2];
+                    double dist = (double)(x-i)*(x-i) + (double)(y-j)*(y-j) + (double)(z-k)*(z-k);
+                    out_dist[gi] = (T_distance)std::sqrt(dist);
+                    out_idx[gi] = (uint32_t)((size_t)x * d1xd2 + (size_t)y * dims[2] + z);
+                }
+            }
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Common setup: allocate features buffer and compute fstrides for 3D AoS.
     // fstrides[d] = TCoord elements between adjacent voxels along dim d.
@@ -282,7 +364,7 @@ class EDT_OMP_Opt {
     template <typename TCoord>
     Distance_and_Index edt_full(char *input, int *dims) {
         size_t sz = (size_t)dims[0] * dims[1] * dims[2];
-        TCoord *features = (TCoord *)malloc(sz * 3 * sizeof(TCoord));
+        TCoord *features = ensure_feature_storage<TCoord>(sz);
 
         size_t istrides[3], fstrides[4];
         make_strides(dims, istrides, fstrides);
@@ -296,14 +378,13 @@ class EDT_OMP_Opt {
             (size_t *)malloc(sz * sizeof(size_t)));
         compute_distances<TCoord>(features, dims,
                                   result.distance.get(), result.indexes.get());
-        free(features);
         return result;
     }
 
     template <typename TCoord>
     Distance_and_Packed_Index edt_full_packed(char *input, int *dims) {
         size_t sz = (size_t)dims[0] * dims[1] * dims[2];
-        TCoord *features = (TCoord *)malloc(sz * 3 * sizeof(TCoord));
+        TCoord *features = ensure_feature_storage<TCoord>(sz);
 
         size_t istrides[3], fstrides[4];
         make_strides(dims, istrides, fstrides);
@@ -317,7 +398,26 @@ class EDT_OMP_Opt {
             (uint32_t *)malloc(sz * sizeof(uint32_t)));
         compute_distances_packed<TCoord>(features, dims,
                                          result.distance.get(), result.indexes.get());
-        free(features);
+        return result;
+    }
+
+    template <typename TCoord>
+    Distance_and_Packed_Index edt_full_flat32(char *input, int *dims) {
+        size_t sz = (size_t)dims[0] * dims[1] * dims[2];
+        TCoord *features = ensure_feature_storage<TCoord>(sz);
+
+        size_t istrides[3], fstrides[4];
+        make_strides(dims, istrides, fstrides);
+        int ishape[3] = { dims[0], dims[1], dims[2] };
+        ComputeFT3D<TCoord>(input, features, ishape, istrides, fstrides);
+
+        Distance_and_Packed_Index result;
+        result.distance = std::unique_ptr<T_distance[]>(
+            (T_distance *)malloc(sz * sizeof(T_distance)));
+        result.indexes = std::unique_ptr<uint32_t[]>(
+            (uint32_t *)malloc(sz * sizeof(uint32_t)));
+        compute_distances_flat32<TCoord>(features, dims,
+                                         result.distance.get(), result.indexes.get());
         return result;
     }
 
@@ -327,7 +427,7 @@ class EDT_OMP_Opt {
     template <typename TCoord>
     std::unique_ptr<T_distance[]> edt_dist_only(char *input, int *dims) {
         size_t sz = (size_t)dims[0] * dims[1] * dims[2];
-        TCoord *features = (TCoord *)malloc(sz * 3 * sizeof(TCoord));
+        TCoord *features = ensure_feature_storage<TCoord>(sz);
 
         size_t istrides[3], fstrides[4];
         make_strides(dims, istrides, fstrides);
@@ -337,7 +437,6 @@ class EDT_OMP_Opt {
         std::unique_ptr<T_distance[]> dist(
             (T_distance *)malloc(sz * sizeof(T_distance)));
         compute_distances<TCoord>(features, dims, dist.get(), nullptr);
-        free(features);
         return dist;
     }
 };

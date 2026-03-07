@@ -41,6 +41,7 @@ int main(int argc, char **argv) {
     double eb = 0.0;
     std::string quantized_file;
     std::string compensation_file;
+    std::string cpu_index_mode = "packed";
     bool use_rbf;
     bool no_ssim = false;
     bool downsample_r2 = false;
@@ -53,12 +54,14 @@ int main(int argc, char **argv) {
     app.add_option("-e", eb, "eb")->required();
     app.add_option("-q", quantized_file, "quantized file")->required();
     app.add_option("-c", compensation_file, "compensation file")->required();
+    app.add_option("--cpu_index_mode", cpu_index_mode, "CPU EDT index mode: packed or flat32")->default_val("packed");
     app.add_option("-t", num_threads, "number of threads")->default_val(1)->check(CLI::Range(1, 256));
     app.add_option("--use_rbf", use_rbf, "use rbf")->default_val(false);
     app.add_option("--no_ssim", no_ssim, "do not calculate ssim")->default_val(false);
     app.add_option("--downsample_r2", downsample_r2, "downsample EDT round 2 by 2x in each dim (faster, ~-0.07 dB PSNR)")->default_val(false);
     app.add_option("--eta", compensation_factor, "compensation_factor")-> default_val(0.9);
     CLI11_PARSE(app, argc, argv);
+    std::printf("cpu index mode = %s\n", cpu_index_mode.c_str());
 
     size_t data_size = 1;
     for (int i = 0; i < N; i++) {
@@ -168,6 +171,14 @@ int main(int argc, char **argv) {
     if (operation) {
         auto compensator = PM::Compensation<Real, int>(N, dims.data(), dec_data.data(), quant_inds.data(),
                                                        max_diff * compensation_factor);
+        if (cpu_index_mode == "packed") {
+            compensator.set_cpu_index_mode(PM::CPUIndexMode::PackedXYZ32);
+        } else if (cpu_index_mode == "flat32") {
+            compensator.set_cpu_index_mode(PM::CPUIndexMode::Flat32);
+        } else {
+            std::fprintf(stderr, "invalid --cpu_index_mode: %s\n", cpu_index_mode.c_str());
+            return 1;
+        }
         compensator.set_frequent_quant_index(frequent_quant_index);
         compensator.set_edt_thread_num(num_threads);
         compensator.set_use_rbf(use_rbf);

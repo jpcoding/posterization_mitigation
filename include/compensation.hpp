@@ -20,6 +20,11 @@
 #include "utils/timer.hpp"
 
 namespace PM {
+enum class CPUIndexMode {
+    PackedXYZ32,
+    Flat32
+};
+
 template <typename T_data, typename T_quant>
 class Compensation {
    public:
@@ -50,6 +55,8 @@ class Compensation {
     void set_frequent_quant_index(T_quant index) { this->frequent_quant_index = index; }
 
     void set_downsample_edt_round2(bool v) { this->downsample_edt_round2 = v; }
+
+    void set_cpu_index_mode(CPUIndexMode mode) { this->cpu_index_mode = mode; }
 
     template <typename T_data_sign>
     char get_sign(T_data_sign data) {
@@ -380,10 +387,18 @@ class Compensation {
     }
 
     std::vector<T_data> get_compensation_map_3d() {
-        // auto timer = Timer();
-        // timer.start();
+        Timer stage_timer;
+        double stage_boundary = 0.0;
+        double stage_edt1 = 0.0;
+        double stage_fill_sign = 0.0;
+        double stage_neutral_boundary = 0.0;
+        double stage_downsample_boundary = 0.0;
+        double stage_edt2 = 0.0;
+        double stage_comp = 0.0;
+
+        stage_timer.start();
         auto bounday_and_sign = get_boundary_and_sign_map_3d(quant_index, N, dims.data(), edt_thread_num);
-        // timer.stop("::first boundary time");
+        stage_boundary = stage_timer.stop();
         auto boundary_map = std::get<0>(bounday_and_sign);
         auto sign_map = std::get<1>(bounday_and_sign);
         char edge_tag = 1;
@@ -394,21 +409,34 @@ class Compensation {
         // halving or quartering the features buffer bandwidth vs the old EDT_OMP.
         auto edt_omp = PM2::EDT_OMP_Opt<T_data>();
         edt_omp.set_num_threads(edt_thread_num);
-        const bool use_packed_indexes = (*std::max_element(dims.begin(), dims.end()) <= 1023);
+        const int max_dim = *std::max_element(dims.begin(), dims.end());
+        const bool can_use_packed_indexes = (max_dim <= 1023);
+        const bool can_use_flat32_indexes = (input_size <= std::numeric_limits<uint32_t>::max());
+        const bool use_packed_indexes =
+            (cpu_index_mode == CPUIndexMode::PackedXYZ32) && can_use_packed_indexes;
+        const bool use_flat32_indexes =
+            (cpu_index_mode == CPUIndexMode::Flat32) && can_use_flat32_indexes;
         std::unique_ptr<T_data[]> distance_array;
         std::unique_ptr<size_t[]> indexes;
-        std::unique_ptr<uint32_t[]> packed_indexes;
+        std::unique_ptr<uint32_t[]> uint32_indexes;
+        stage_timer.start();
         if (use_packed_indexes) {
             auto edt_result = edt_omp.NI_EuclideanFeatureTransform_packed(
                 boundary_map.data(), N, dims.data(), edt_thread_num);
             distance_array = std::move(edt_result.distance);
-            packed_indexes = std::move(edt_result.indexes);
+            uint32_indexes = std::move(edt_result.indexes);
+        } else if (use_flat32_indexes) {
+            auto edt_result = edt_omp.NI_EuclideanFeatureTransform_flat32(
+                boundary_map.data(), N, dims.data(), edt_thread_num);
+            distance_array = std::move(edt_result.distance);
+            uint32_indexes = std::move(edt_result.indexes);
         } else {
             auto edt_result = edt_omp.NI_EuclideanFeatureTransform(
                 boundary_map.data(), N, dims.data(), edt_thread_num);
             distance_array = std::move(edt_result.distance);
             indexes = std::move(edt_result.indexes);
         }
+        stage_edt1 = stage_timer.stop();
         auto packed_to_flat = [this](uint32_t packed) -> size_t {
             size_t x = (size_t)((packed >> 20) & 0x3FFu);
             size_t y = (size_t)((packed >> 10) & 0x3FFu);
@@ -416,30 +444,33 @@ class Compensation {
             return x * (size_t)dims[1] * dims[2] + y * dims[2] + z;
         };
 
-        // timer.start();
+        stage_timer.start();
 #pragma omp parallel for num_threads(edt_thread_num)
         for (size_t i = 0; i < input_size; i++) {
             if (boundary_map[i] != edge_tag)  // non-boundary points ·
             {
-                sign_map[i] = use_packed_indexes ? sign_map[packed_to_flat(packed_indexes[i])]
-                                                 : sign_map[indexes[i]];
+                if (use_packed_indexes) {
+                    sign_map[i] = sign_map[packed_to_flat(uint32_indexes[i])];
+                } else if (use_flat32_indexes) {
+                    sign_map[i] = sign_map[uint32_indexes[i]];
+                } else {
+                    sign_map[i] = sign_map[indexes[i]];
+                }
             }
         }
-        // timer.stop("::first sign");
+        stage_fill_sign = stage_timer.stop();
 
         // dump the sign map
 
-        // get the second boundry map
-        // timer.start();
+        stage_timer.start();
         auto boundary_map2 = get_boundary(sign_map.data(), N, dims.data(), edt_thread_num);
-
-        // timer.stop("::second boundary");
 #pragma omp parallel for num_threads(edt_thread_num)
         for (int i = 0; i < input_size; i++) {
             if (boundary_map2[i] == edge_tag && boundary_map[i] == edge_tag) {
                 boundary_map2[i] = 0;  // boundary lable
             }
         }
+        stage_neutral_boundary = stage_timer.stop();
 
         auto rbf = [](double r) -> double {
             return 1 / sqrt(1 + r * r * 1.0);  // inverse_multiquadric
@@ -462,6 +493,18 @@ class Compensation {
             int bz = (int)(b & 0x3FFu);
             return std::sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by) + (az - bz) * (az - bz));
         };
+        auto cal_distance_flat32 = [this](uint32_t a, uint32_t b) -> double {
+            size_t x1 = (size_t)a / ((size_t)dims[1] * dims[2]);
+            size_t y1 = ((size_t)a / dims[2]) % dims[1];
+            size_t z1 = (size_t)a % dims[2];
+            size_t x2 = (size_t)b / ((size_t)dims[1] * dims[2]);
+            size_t y2 = ((size_t)b / dims[2]) % dims[1];
+            size_t z2 = (size_t)b % dims[2];
+            double dx = (double)x1 - x2;
+            double dy = (double)y1 - y2;
+            double dz = (double)z1 - z2;
+            return std::sqrt(dx * dx + dy * dy + dz * dz);
+        };
 
         if (downsample_edt_round2 && !use_rbf) {
             // --- Downsampled EDT round 2 (2×2×2 logical-OR downsample → 1/8 volume) ---
@@ -469,6 +512,7 @@ class Compensation {
             size_t ds_size = (size_t)ds_dims[0] * ds_dims[1] * ds_dims[2];
 
             // 2×2×2 logical-OR downsample of boundary_map2
+            stage_timer.start();
             std::vector<char> ds_boundary(ds_size, 0);
             for (size_t i = 0; i < input_size; i++) {
                 if (boundary_map2[i] != 0) {
@@ -478,13 +522,17 @@ class Compensation {
                     ds_boundary[(size_t)(x / 2) * ds_dims[1] * ds_dims[2] + (y / 2) * ds_dims[2] + (z / 2)] = 1;
                 }
             }
+            stage_downsample_boundary = stage_timer.stop();
 
             // EDT on the downsampled volume (dist-only: indexes from ds EDT are unused)
+            stage_timer.start();
             auto edt_ds = PM2::EDT_OMP_Opt<double>();
             edt_ds.set_num_threads(edt_thread_num);
             auto ds_distance = edt_ds.NI_EuclideanFeatureTransform_dist_only(ds_boundary.data(), N, ds_dims, edt_thread_num);
+            stage_edt2 = stage_timer.stop();
 
             // IDW compensation with trilinear interpolation of downsampled d_neutral
+            stage_timer.start();
 #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 double d1 = distance_array[i] + 0.5;
@@ -525,30 +573,47 @@ class Compensation {
                 double magnitude = (1.0 / d1) / (1.0 / d1 + 1.0 / d2);
                 compensation_map[i] = sign * magnitude * comepnsation_value;
             }
+            stage_comp = stage_timer.stop();
         } else if (use_rbf) {
             // --- Full-resolution EDT round 2, RBF path (needs indexes2 for cal_distance) ---
             std::unique_ptr<T_data[]> distance_array2;
             std::unique_ptr<size_t[]> indexes2;
-            std::unique_ptr<uint32_t[]> packed_indexes2;
+            std::unique_ptr<uint32_t[]> uint32_indexes2;
+            stage_timer.start();
             if (use_packed_indexes) {
                 auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform_packed(
                     boundary_map2.data(), N, dims.data(), edt_thread_num);
                 distance_array2 = std::move(edt_result2.distance);
-                packed_indexes2 = std::move(edt_result2.indexes);
+                uint32_indexes2 = std::move(edt_result2.indexes);
+            } else if (use_flat32_indexes) {
+                auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform_flat32(
+                    boundary_map2.data(), N, dims.data(), edt_thread_num);
+                distance_array2 = std::move(edt_result2.distance);
+                uint32_indexes2 = std::move(edt_result2.indexes);
             } else {
                 auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform(
                     boundary_map2.data(), N, dims.data(), edt_thread_num);
                 distance_array2 = std::move(edt_result2.distance);
                 indexes2 = std::move(edt_result2.indexes);
             }
+            stage_edt2 = stage_timer.stop();
+            stage_timer.start();
 #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 double distance1 = distance_array[i] + 0.5;
                 double distance2 = distance_array2[i] + 0.5;
-                char sign = use_packed_indexes ? sign_map[packed_to_flat(packed_indexes[i])]
-                                               : sign_map[indexes[i]];
-                double d0 = use_packed_indexes ? cal_distance_packed(packed_indexes[i], packed_indexes2[i])
-                                               : cal_distance(indexes[i], indexes2[i]);
+                char sign;
+                double d0;
+                if (use_packed_indexes) {
+                    sign = sign_map[packed_to_flat(uint32_indexes[i])];
+                    d0 = cal_distance_packed(uint32_indexes[i], uint32_indexes2[i]);
+                } else if (use_flat32_indexes) {
+                    sign = sign_map[uint32_indexes[i]];
+                    d0 = cal_distance_flat32(uint32_indexes[i], uint32_indexes2[i]);
+                } else {
+                    sign = sign_map[indexes[i]];
+                    d0 = cal_distance(indexes[i], indexes2[i]);
+                }
                 double a = rbf(0);
                 double b = rbf(d0);
                 double w0 = a / (a * a - b * b);
@@ -558,10 +623,14 @@ class Compensation {
                 else if (sx < -1) sx = -1;
                 compensation_map[i] = comepnsation_value * sx * sign;
             }
+            stage_comp = stage_timer.stop();
         } else {
             // --- Full-resolution EDT round 2, IDW path (dist-only: saves ~1 GB index array) ---
+            stage_timer.start();
             auto distance_array2 = edt_omp.NI_EuclideanFeatureTransform_dist_only(
                 boundary_map2.data(), N, dims.data(), edt_thread_num);
+            stage_edt2 = stage_timer.stop();
+            stage_timer.start();
 #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 double distance1 = distance_array[i] + 0.5;
@@ -570,7 +639,17 @@ class Compensation {
                 double magnitude = (1 / distance1) / (1 / distance1 + 1 / distance2);
                 compensation_map[i] = sign * magnitude * comepnsation_value;
             }
+            stage_comp = stage_timer.stop();
         }
+
+        std::cout << "StageTime boundary_detect: " << stage_boundary << std::endl;
+        std::cout << "StageTime edt_round1: " << stage_edt1 << std::endl;
+        std::cout << "StageTime fill_sign: " << stage_fill_sign << std::endl;
+        std::cout << "StageTime neutral_boundary: " << stage_neutral_boundary << std::endl;
+        std::cout << "StageTime downsample_boundary: " << stage_downsample_boundary << std::endl;
+        std::cout << "StageTime edt_round2: " << stage_edt2 << std::endl;
+        std::cout << "StageTime compensation: " << stage_comp << std::endl;
+        std::cout << "StageTime edt_total: " << (stage_edt1 + stage_edt2) << std::endl;
 
         return compensation_map;
     }
@@ -791,6 +870,7 @@ class Compensation {
     double edt_time = 0.0;
     bool use_rbf = false;
     bool downsample_edt_round2 = false;
+    CPUIndexMode cpu_index_mode = CPUIndexMode::PackedXYZ32;
     std::vector<T_data> distance_array1;
     T_quant frequent_quant_index = 0;
 };
