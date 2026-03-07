@@ -11,6 +11,7 @@
 #include "compute_grad.hpp"
 #include "edt_transform.hpp"
 #include "edt_transform_omp.hpp"
+#include "edt_transform_omp_opt.hpp"
 #include "get_boundary.hpp"
 #include "utils/file_utils.hpp"
 #include "utils/smooth_distance.hpp"
@@ -45,6 +46,8 @@ class Compensation {
     void set_use_rbf(bool use_rbf) { this->use_rbf = use_rbf; }
 
     void set_frequent_quant_index(T_quant index) { this->frequent_quant_index = index; }
+
+    void set_downsample_edt_round2(bool v) { this->downsample_edt_round2 = v; }
 
     template <typename T_data_sign>
     char get_sign(T_data_sign data) {
@@ -385,8 +388,9 @@ class Compensation {
         
 
         
-        auto edt_omp = PM2::EDT_OMP<T_data, int>();
-        // timer.start();
+        // EDT_OMP_Opt auto-selects int8/int16/int32 coord storage based on max dim,
+        // halving or quartering the features buffer bandwidth vs the old EDT_OMP.
+        auto edt_omp = PM2::EDT_OMP_Opt<T_data>();
         edt_omp.set_num_threads(edt_thread_num);
         auto edt_result = edt_omp.NI_EuclideanFeatureTransform(boundary_map.data(), N, dims.data(), edt_thread_num);
         // timer.stop("::first edt time");
@@ -418,14 +422,8 @@ class Compensation {
         }
 
         auto rbf = [](double r) -> double {
-            // return std::exp(-0.2*r);
-            // return (1/r) / (1/r + 1); //?
             return 1 / sqrt(1 + r * r * 1.0);  // inverse_multiquadric
-            // cubic, thin-plate, gaussian, multiquadric, inverse multiquadric
-            // thin-plate:
-            // return r*r * log(r);
         };
-        // calculate the distance between two points
         auto cal_distance = [this](int i, int j) -> double {
             int x1 = i / (dims[1] * dims[2]);
             int y1 = (i / dims[2]) % dims[1];
@@ -436,41 +434,92 @@ class Compensation {
             return std::sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) + (z1 - z2) * (z1 - z2));
         };
 
-        // timer.start();
-        auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform(boundary_map2.data(), N, dims.data(), edt_thread_num);
+        if (downsample_edt_round2 && !use_rbf) {
+            // --- Downsampled EDT round 2 (2×2×2 logical-OR downsample → 1/8 volume) ---
+            int ds_dims[3] = {(dims[0] + 1) / 2, (dims[1] + 1) / 2, (dims[2] + 1) / 2};
+            size_t ds_size = (size_t)ds_dims[0] * ds_dims[1] * ds_dims[2];
 
-        // timer.stop("::second edt");
-        auto distance_array2 = std::move(edt_result2.distance);
-        auto indexes2 = std::move(edt_result2.indexes);
-// timer.start();
-        if (use_rbf == true) {
+            // 2×2×2 logical-OR downsample of boundary_map2
+            std::vector<char> ds_boundary(ds_size, 0);
+            for (size_t i = 0; i < input_size; i++) {
+                if (boundary_map2[i] != 0) {
+                    int x = i / (dims[1] * dims[2]);
+                    int y = (i / dims[2]) % dims[1];
+                    int z = i % dims[2];
+                    ds_boundary[(size_t)(x / 2) * ds_dims[1] * ds_dims[2] + (y / 2) * ds_dims[2] + (z / 2)] = 1;
+                }
+            }
+
+            // EDT on the downsampled volume (dist-only: indexes from ds EDT are unused)
+            auto edt_ds = PM2::EDT_OMP_Opt<double>();
+            edt_ds.set_num_threads(edt_thread_num);
+            auto ds_distance = edt_ds.NI_EuclideanFeatureTransform_dist_only(ds_boundary.data(), N, ds_dims, edt_thread_num);
+
+            // IDW compensation with trilinear interpolation of downsampled d_neutral
+#pragma omp parallel for num_threads(edt_thread_num)
+            for (size_t i = 0; i < input_size; i++) {
+                double d1 = distance_array[i] + 0.5;
+                char sign = sign_map[i];
+
+                int x = i / (dims[1] * dims[2]);
+                int y = (i / dims[2]) % dims[1];
+                int z = i % dims[2];
+
+                // Map full-res coord to downsampled coord
+                // DS voxel center i is at full-res 2*i+0.5, so fx = (x+0.5)/2 - 0.5
+                double fx = (x + 0.5) * 0.5 - 0.5;
+                double fy = (y + 0.5) * 0.5 - 0.5;
+                double fz = (z + 0.5) * 0.5 - 0.5;
+
+                int x0 = (int)std::floor(fx), y0 = (int)std::floor(fy), z0 = (int)std::floor(fz);
+                double wx = fx - x0, wy = fy - y0, wz = fz - z0;
+
+                int x1 = std::min(x0 + 1, ds_dims[0] - 1); x0 = std::max(x0, 0);
+                int y1 = std::min(y0 + 1, ds_dims[1] - 1); y0 = std::max(y0, 0);
+                int z1 = std::min(z0 + 1, ds_dims[2] - 1); z0 = std::max(z0, 0);
+
+                auto ds_idx = [&](int a, int b, int c) -> size_t {
+                    return (size_t)a * ds_dims[1] * ds_dims[2] + b * ds_dims[2] + c;
+                };
+
+                double d2_raw = ds_distance[ds_idx(x0,y0,z0)] * (1-wx)*(1-wy)*(1-wz)
+                              + ds_distance[ds_idx(x1,y0,z0)] * wx   *(1-wy)*(1-wz)
+                              + ds_distance[ds_idx(x0,y1,z0)] * (1-wx)*wy   *(1-wz)
+                              + ds_distance[ds_idx(x1,y1,z0)] * wx   *wy   *(1-wz)
+                              + ds_distance[ds_idx(x0,y0,z1)] * (1-wx)*(1-wy)*wz
+                              + ds_distance[ds_idx(x1,y0,z1)] * wx   *(1-wy)*wz
+                              + ds_distance[ds_idx(x0,y1,z1)] * (1-wx)*wy   *wz
+                              + ds_distance[ds_idx(x1,y1,z1)] * wx   *wy   *wz;
+                // Scale ds units → full-res, then add the standard +0.5 offset
+                double d2 = d2_raw * 2.0 + 0.5;
+
+                double magnitude = (1.0 / d1) / (1.0 / d1 + 1.0 / d2);
+                compensation_map[i] = sign * magnitude * comepnsation_value;
+            }
+        } else if (use_rbf) {
+            // --- Full-resolution EDT round 2, RBF path (needs indexes2 for cal_distance) ---
+            auto edt_result2 = edt_omp.NI_EuclideanFeatureTransform(boundary_map2.data(), N, dims.data(), edt_thread_num);
+            auto distance_array2 = std::move(edt_result2.distance);
+            auto indexes2        = std::move(edt_result2.indexes);
 #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 double distance1 = distance_array[i] + 0.5;
                 double distance2 = distance_array2[i] + 0.5;
                 char sign = sign_map[indexes[i]];
-                if (1) {
-                    // double compensation_value = 0;
-                    double d0 = cal_distance(indexes[i], indexes2[i]);
-                    double a = rbf(0);
-                    double b = rbf(d0);
-                    double w0 = a / (a * a - b * b);
-                    double w1 = b / (-a * a + b * b);
-                    double sx = (w0 * rbf(distance1) + w1 * rbf(distance2));
-                    // clamp sx between [-1 1]
-                    if (sx > 1) {
-                        sx = 1;
-                    } else if (sx < -1) {
-                        sx = -1;
-                    }
-                    compensation_map[i] = comepnsation_value * sx * sign;
-
-                } else {
-                    double magnitude = (1 / distance1) / (1 / distance1 + 1 / distance2);
-                    compensation_map[i] = sign * magnitude * comepnsation_value;
-                }
+                double d0 = cal_distance(indexes[i], indexes2[i]);
+                double a = rbf(0);
+                double b = rbf(d0);
+                double w0 = a / (a * a - b * b);
+                double w1 = b / (-a * a + b * b);
+                double sx = (w0 * rbf(distance1) + w1 * rbf(distance2));
+                if (sx > 1) sx = 1;
+                else if (sx < -1) sx = -1;
+                compensation_map[i] = comepnsation_value * sx * sign;
             }
         } else {
+            // --- Full-resolution EDT round 2, IDW path (dist-only: saves ~1 GB index array) ---
+            auto distance_array2 = edt_omp.NI_EuclideanFeatureTransform_dist_only(
+                boundary_map2.data(), N, dims.data(), edt_thread_num);
 #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 double distance1 = distance_array[i] + 0.5;
@@ -480,7 +529,6 @@ class Compensation {
                 compensation_map[i] = sign * magnitude * comepnsation_value;
             }
         }
-    // timer.stop("::compensation");
 
         return compensation_map;
     }
@@ -700,6 +748,7 @@ class Compensation {
     int edt_thread_num = 8;  // the thread number for edt computing
     double edt_time = 0.0;
     bool use_rbf = false;
+    bool downsample_edt_round2 = false;
     std::vector<T_data> distance_array1;
     T_quant frequent_quant_index = 0;
 };

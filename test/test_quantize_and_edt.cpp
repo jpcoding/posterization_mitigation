@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
     std::string compensation_file;
     bool use_rbf;
     bool no_ssim = false;
+    bool downsample_r2 = false;
     double compensation_factor = 0.9;
     app.add_option("-N", N, "number of dimensions")->required();
     dims.resize(N, 0);
@@ -55,6 +56,7 @@ int main(int argc, char **argv) {
     app.add_option("-t", num_threads, "number of threads")->default_val(1)->check(CLI::Range(1, 256));
     app.add_option("--use_rbf", use_rbf, "use rbf")->default_val(false);
     app.add_option("--no_ssim", no_ssim, "do not calculate ssim")->default_val(false);
+    app.add_option("--downsample_r2", downsample_r2, "downsample EDT round 2 by 2x in each dim (faster, ~-0.07 dB PSNR)")->default_val(false);
     app.add_option("--eta", compensation_factor, "compensation_factor")-> default_val(0.9);
     CLI11_PARSE(app, argc, argv);
 
@@ -169,6 +171,7 @@ int main(int argc, char **argv) {
         compensator.set_frequent_quant_index(frequent_quant_index);
         compensator.set_edt_thread_num(num_threads);
         compensator.set_use_rbf(use_rbf);
+        compensator.set_downsample_edt_round2(downsample_r2);
 
         auto compensation_map = compensator.get_compensation_map();
 
