@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
     {
         time_exchnage1 = MPI_Wtime();
         w_quant_inds.resize(w_block_size, 0);
-        data_exhange3d(quant_inds.data(), block_dims, block_strides, w_quant_inds.data(), w_block_dims,
+        data_exchange3d(quant_inds.data(), block_dims, block_strides, w_quant_inds.data(), w_block_dims,
                            w_block_strides, coords, dims, cart_comm);
         // MPI_Barrier(cart_comm);
         time_exchnage1 = MPI_Wtime() - time_exchnage1;
@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
         exchange_time2 = MPI_Wtime();
         w_sign_map.resize(w_block_size, 0);
         {
-            data_exhange3d(sign_map.data(), block_dims, block_strides, w_sign_map.data(), w_block_dims, w_block_strides,
+            data_exchange3d(sign_map.data(), block_dims, block_strides, w_sign_map.data(), w_block_dims, w_block_strides,
                            coords, dims, cart_comm);
         }
         // MPI_Barrier(cart_comm);

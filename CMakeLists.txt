@@ -5,12 +5,13 @@ set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 find_package(OpenMP REQUIRED)
+find_package(BLAS QUIET)
 option(PM_ENABLE_CUDA "Build CUDA benchmarks when a CUDA compiler is available" ON)
 
 add_subdirectory(test)
 
-# find_package(MPI REQUIRED)
-# add_subdirectory(test_mpi)
+find_package(MPI REQUIRED)
+add_subdirectory(test_mpi)
 
 if(PM_ENABLE_CUDA)
     include(CheckLanguage)

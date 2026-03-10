@@ -189,10 +189,10 @@ int main(int argc, char** argv) {
     time = MPI_Wtime();
     double time_exchnage1 = MPI_Wtime();
     if (1)
-        data_exhange3d(quant_inds.data(), block_dims, block_strides, w_quant_inds.data(), w_block_dims, w_block_strides,
+        data_exchange3d(quant_inds.data(), block_dims, block_strides, w_quant_inds.data(), w_block_dims, w_block_strides,
                        coords, dims, cart_comm);
     if(0)
-        data_exhange3d_extended(quant_inds.data(), block_dims, block_strides, w_quant_inds.data(), w_block_dims,
+        data_exchange3d_extended(quant_inds.data(), block_dims, block_strides, w_quant_inds.data(), w_block_dims,
                                 w_block_strides, 1, coords, dims, cart_comm);
     // barrier
     // clear the memory used by local quant 
@@ -248,7 +248,7 @@ int main(int argc, char** argv) {
     std::vector<char> w_sign_map(w_block_size, 0);
     double exchange_time2 = MPI_Wtime();
     if (1) {
-        data_exhange3d(sign_map.data(), block_dims, block_strides, w_sign_map.data(), w_block_dims, w_block_strides,
+        data_exchange3d(sign_map.data(), block_dims, block_strides, w_sign_map.data(), w_block_dims, w_block_strides,
                        coords, dims, cart_comm);
     }
     MPI_Barrier(cart_comm);

@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/home/jp/git/posterization_mitigation/build/test_cuda/test_compensation_cuda /home/jp/data/hurricane_100x500x500/Uf48.bin.f32 0.01 1 500 500 100)",
+      "Bash(/home/jp/git/posterization_mitigation/build/test_cuda/test_compensation_cuda /home/jp/data/hurricane_100x500x500/Uf48.bin.f32 0.01 0 500 500 100)",
+      "Bash(nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader)",
+      "Bash(nvcc --version)",
+      "Bash(mkdir -p build)",
+      "Bash(cmake .. -DCMAKE_BUILD_TYPE=Release)",
+      "Read(//home/jp/**)",
+      "Bash(./test_cuda/test_compensation_cuda /home/jp/data/hurricane_100x500x500/Uf48.bin.f32 0.01 1 500 500 100 2)",
+      "Bash(./test_cuda/test_compensation_cuda /home/jp/data/hurricane_100x500x500/Uf48.bin.f32 0.01 1 500 500 100 3)",
+      "Bash(./test_cuda/test_compensation_cuda /home/jp/data/nyx_512x512x512/velocity_x.f32 0.01 1 512 512 512 2)",
+      "Bash(./test_cuda/test_compensation_cuda /home/jp/data/nyx_512x512x512/velocity_x.f32 0.01 1 512 512 512 3)",
+      "Bash(for i in 1 2 3)",
+      "Bash(do ./test_cuda/test_compensation_cuda /home/jp/data/nyx_512x512x512/velocity_x.f32 0.01 1 512 512 512 2)",
+      "Bash(done)",
+      "Bash(do ./test_cuda/test_compensation_cuda /home/jp/data/nyx_512x512x512/velocity_x.f32 0.01 1 512 512 512 3)",
+      "Bash(./build/test/test_quantize_and_edt -N 3 -d 512 512 512 -i /home/jp/data/nyx_512x512x512/velocity_x.f32 -m rel -e 0.01 -q /tmp/nyx_dec.f32 -c /tmp/nyx_comp.f32 -t 8 --no_ssim)",
+      "Bash(./build/test/test_quantize_and_edt -N 3 -d 512 512 512 -i /home/jp/data/nyx_512x512x512/velocity_x.f32 -m rel -e 0.01 -q /tmp/nyx_dec.f32 -c /tmp/nyx_comp.f32 -t 8 --no_ssim 1)",
+      "Bash(./build/test/test_quantize_and_edt -N 3 -d 512 512 512 -i /home/jp/data/nyx_512x512x512/velocity_x.f32 -m rel -e 0.01 -q /tmp/nyx_dec_ds.f32 -c /tmp/nyx_comp_ds.f32 -t 8 --no_ssim 1 --downsample_r2 1)",
+      "Bash(./build/test/test_quantize_and_edt -N 3 -d 512 512 512 -i /home/jp/data/nyx_512x512x512/velocity_x.f32 -m rel -e 0.01 -q /tmp/nyx_dec.f32 -c /tmp/nyx_comp.f32 -t 8 --no_ssim 1 --downsample_r2 1)",
+      "Bash(DATA=/home/jp/data/nyx_512x512x512/velocity_x.f32)",
+      "Bash(BIN=./build/test/test_quantize_and_edt)",
+      "Bash(BASE_ARGS=\"-N 3 -d 512 512 512 -i $DATA -m rel -e 1e-3 -q /tmp/qfile.f32 -c /tmp/cfile.f32 --no_ssim 1\" echo \"=== Full-res EDT round 2 \\(old/default\\) ===\" for t in 1 2 4 8)",
+      "Bash(do echo -n \" threads=$t: \" $BIN $BASE_ARGS -t $t)",
+      "Read(//home/jp/git/posterization_mitigation/build/**)",
+      "Bash(do echo -n \" threads=$t: \" $BIN $BASE_ARGS -t $t --downsample_r2 1)",
+      "Bash(build/test/test_quantize_and_edt -N 3 -d 512 512 512 -i /home/jp/data/nyx_512x512x512/velocity_x.f32 -m abs -e 0.1 -q /tmp/q.bin -c /tmp/c.bin -t 8 --no_ssim 1 --downsample_r2 8)",
+      "Bash(build/test/test_quantize_and_edt -N 3 -d 512 512 512 -i /home/jp/data/nyx_512x512x512/velocity_x.f32 -m rel -e 1e-3 -q /tmp/q.bin -c /tmp/c.bin -t 8 --no_ssim 1 --downsample_r2 0)",
+      "Read(//^PSNR = / { psnr=$3; gsub\\(\"\"\"\",\"\"\"\",\"\"\"\"\"\"\"\",psnr\\); got_psnr=1 }\n    /^SSIM = /**)",
+      "Bash(__NEW_LINE_4eca9d98742a5fe8__ awk ':*)"
+    ],
+    "additionalDirectories": [
+      "/home/jp/.claude/projects/-home-jp-git-posterization-mitigation"
+    ]
+  }
+}

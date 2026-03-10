@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
+#include <vector>
 #include <omp.h>
-#include <iostream> 
+#include <iostream>
 
 #define K1 0.01
 #define K2 0.03
@@ -558,5 +560,6 @@ namespace PM
         }
         return result;
     }
-}
+
+} // namespace PM
 #endif

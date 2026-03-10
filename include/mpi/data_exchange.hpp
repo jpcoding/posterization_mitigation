@@ -7,8 +7,8 @@
 #include "mpi/mpi_datatype.hpp"
 
 template <typename T>
-void data_exhange3d(T* src, int* src_dims, size_t* src_strides, T* dest, int* dest_dims, size_t* dest_strides,
-                    int* mpi_coords, int* mpi_dims, MPI_Comm& cart_comm) {
+void data_exchange3d(T* src, int* src_dims, size_t* src_strides, T* dest, int* dest_dims, size_t* dest_strides,
+                     int* mpi_coords, int* mpi_dims, MPI_Comm& cart_comm) {
     // use mpi_win to createa global memory to get the boundayer points
 
     // use ghost elements for the boundary points
@@ -291,11 +291,11 @@ void data_exhange3d(T* src, int* src_dims, size_t* src_strides, T* dest, int* de
                     }
                     if (valid_coords) {
                         int res = MPI_Cart_rank(cart_comm, cur_coords, &target_rank);
-                        size_t idx =
-                            send_index[i][0] * src_strides[0] + send_index[i][1] * src_strides[1] + send_index[i][2];
+                        size_t idx = send_index[i][0] * src_strides[0] + send_index[i][1] * src_strides[1] +
+                                     send_index[i][2] * src_strides[2];
                         // MPI_Send(&src[idx], 1, mpi_type, target_rank, 0, cart_comm);
                         size_t idx2 = receive_index[i][0] * dest_strides[0] + receive_index[i][1] * dest_strides[1] +
-                                      receive_index[i][2];
+                                      receive_index[i][2] * dest_strides[2];
                         MPI_Sendrecv(&src[idx], 1, mpi_type, target_rank, 0, &dest[idx2], 1, mpi_type, target_rank, 0,
                                      cart_comm, &status);
                     }
@@ -306,8 +306,8 @@ void data_exhange3d(T* src, int* src_dims, size_t* src_strides, T* dest, int* de
 }
 
 template <typename T>
-void data_exhange3d_extended(T* src, int* src_dims, size_t* src_strides, T* dest, int* dest_dims, size_t* dest_strides,
-                             int extend_size, int* mpi_coords, int* mpi_dims, MPI_Comm& cart_comm) {
+void data_exchange3d_extended(T* src, int* src_dims, size_t* src_strides, T* dest, int* dest_dims, size_t* dest_strides,
+                              int extend_size, int* mpi_coords, int* mpi_dims, MPI_Comm& cart_comm) {
     // use mpi_win to createa global memory to get the boundayer points
 
     // use ghost elements for the boundary points
@@ -594,6 +594,164 @@ void data_exhange3d_extended(T* src, int* src_dims, size_t* src_strides, T* dest
             }
         }
     }
+}
+
+// Non-blocking version of data_exchange3d_extended.
+// Posts all 26 Isend/Irecv pairs simultaneously (faces, edges, corners), then
+// waits with a single MPI_Waitall.  The destination sub-regions written by face,
+// edge, and corner receives are disjoint, so concurrent posting is safe.
+template <typename T>
+void data_exchange3d_extended_nb(T* src, int* src_dims, size_t* src_strides, T* dest, int* dest_dims,
+                                  size_t* dest_strides, int extend_size, int* mpi_coords, int* mpi_dims,
+                                  MPI_Comm& cart_comm) {
+    MPI_Datatype mpi_type = mpi_get_type<T>();
+    int ndims = 3;
+
+    // Copy local data into dest at the appropriate ghost offset.
+    for (int i = 0; i < src_dims[0]; i++) {
+        int w_i = mpi_coords[0] == 0 ? i : i + extend_size;
+        for (int j = 0; j < src_dims[1]; j++) {
+            int w_j = mpi_coords[1] == 0 ? j : j + extend_size;
+            for (int k = 0; k < src_dims[2]; k++) {
+                int w_k = mpi_coords[2] == 0 ? k : k + extend_size;
+                dest[w_i * dest_strides[0] + w_j * dest_strides[1] + w_k * dest_strides[2]] =
+                    src[i * src_strides[0] + j * src_strides[1] + k * src_strides[2]];
+            }
+        }
+    }
+
+    std::vector<MPI_Request> requests;
+    std::vector<MPI_Datatype> types;
+
+    // Post one Isend + Irecv pair using subarray derived types.
+    // Derived types are stored in `types` and freed after MPI_Waitall.
+    auto post = [&](int target_rank, int* ss, int* ds, int* subsizes) {
+        MPI_Datatype st, rt;
+        MPI_Type_create_subarray(ndims, src_dims, subsizes, ss, MPI_ORDER_C, mpi_type, &st);
+        MPI_Type_commit(&st);
+        MPI_Type_create_subarray(ndims, dest_dims, subsizes, ds, MPI_ORDER_C, mpi_type, &rt);
+        MPI_Type_commit(&rt);
+        types.push_back(st);
+        types.push_back(rt);
+        MPI_Request rs, rr;
+        MPI_Isend(src,  1, st, target_rank, 0, cart_comm, &rs);
+        MPI_Irecv(dest, 1, rt, target_rank, 0, cart_comm, &rr);
+        requests.push_back(rs);
+        requests.push_back(rr);
+    };
+
+    // --- 6 faces ---
+    for (int i = 0; i < 3; i++) {
+        int fi1 = (i + 1) % 3, fi2 = (i + 2) % 3;
+        int subsizes[3] = {src_dims[0], src_dims[1], src_dims[2]};
+        subsizes[i] = extend_size;
+
+        if (mpi_coords[i] != mpi_dims[i] - 1) {
+            int rc[3] = {mpi_coords[0], mpi_coords[1], mpi_coords[2]};
+            rc[i] = mpi_coords[i] + 1;
+            int target_rank; MPI_Cart_rank(cart_comm, rc, &target_rank);
+            int ss[3] = {0, 0, 0}; ss[i] = src_dims[i] - extend_size;
+            int ds[3] = {0, 0, 0};
+            ds[i]   = mpi_coords[i]   == 0 ? src_dims[i]   : src_dims[i]   + extend_size;
+            ds[fi1] = mpi_coords[fi1] == 0 ? 0             : extend_size;
+            ds[fi2] = mpi_coords[fi2] == 0 ? 0             : extend_size;
+            post(target_rank, ss, ds, subsizes);
+        }
+        if (mpi_coords[i] != 0) {
+            int rc[3] = {mpi_coords[0], mpi_coords[1], mpi_coords[2]};
+            rc[i] = mpi_coords[i] - 1;
+            int target_rank; MPI_Cart_rank(cart_comm, rc, &target_rank);
+            int ss[3] = {0, 0, 0};
+            int ds[3] = {0, 0, 0};
+            ds[fi1] = mpi_coords[fi1] == 0 ? 0 : extend_size;
+            ds[fi2] = mpi_coords[fi2] == 0 ? 0 : extend_size;
+            post(target_rank, ss, ds, subsizes);
+        }
+    }
+
+    // --- 12 edges ---
+    for (int d1 = 0; d1 < 3; d1++) {
+        int d2 = (d1 + 1) % 3, d3 = (d1 + 2) % 3;
+        int subsizes[3] = {src_dims[0], src_dims[1], src_dims[2]};
+        subsizes[d2] = extend_size;
+        subsizes[d3] = extend_size;
+
+        auto post_edge = [&](int dv2, int dv3, int ss2, int ss3, int ds2, int ds3) {
+            int rc[3] = {mpi_coords[0], mpi_coords[1], mpi_coords[2]};
+            rc[d2] = mpi_coords[d2] + dv2;
+            rc[d3] = mpi_coords[d3] + dv3;
+            int target_rank; MPI_Cart_rank(cart_comm, rc, &target_rank);
+            int ss[3] = {0, 0, 0}; ss[d2] = ss2; ss[d3] = ss3;
+            int ds[3] = {0, 0, 0};
+            ds[d1] = mpi_coords[d1] == 0 ? 0 : extend_size;
+            ds[d2] = ds2; ds[d3] = ds3;
+            post(target_rank, ss, ds, subsizes);
+        };
+
+        if (mpi_coords[d2] != 0              && mpi_coords[d3] != 0)
+            post_edge(-1, -1, 0, 0, 0, 0);
+        if (mpi_coords[d2] != 0              && mpi_coords[d3] != mpi_dims[d3] - 1)
+            post_edge(-1, +1, 0, src_dims[d3] - extend_size, 0, dest_dims[d3] - extend_size);
+        if (mpi_coords[d2] != mpi_dims[d2]-1 && mpi_coords[d3] != 0)
+            post_edge(+1, -1, src_dims[d2] - extend_size, 0, dest_dims[d2] - extend_size, 0);
+        if (mpi_coords[d2] != mpi_dims[d2]-1 && mpi_coords[d3] != mpi_dims[d3] - 1)
+            post_edge(+1, +1, src_dims[d2] - extend_size, src_dims[d3] - extend_size,
+                               dest_dims[d2] - extend_size, dest_dims[d3] - extend_size);
+    }
+
+    // --- 8 corners ---
+    {
+        int target_coords[8][3] = {
+            {mpi_coords[0]-1, mpi_coords[1]-1, mpi_coords[2]-1},
+            {mpi_coords[0]-1, mpi_coords[1]-1, mpi_coords[2]+1},
+            {mpi_coords[0]-1, mpi_coords[1]+1, mpi_coords[2]-1},
+            {mpi_coords[0]-1, mpi_coords[1]+1, mpi_coords[2]+1},
+            {mpi_coords[0]+1, mpi_coords[1]-1, mpi_coords[2]-1},
+            {mpi_coords[0]+1, mpi_coords[1]-1, mpi_coords[2]+1},
+            {mpi_coords[0]+1, mpi_coords[1]+1, mpi_coords[2]-1},
+            {mpi_coords[0]+1, mpi_coords[1]+1, mpi_coords[2]+1},
+        };
+        int send_idx[8][3] = {
+            {0,                          0,                          0},
+            {0,                          0,                          src_dims[2] - extend_size},
+            {0,                          src_dims[1] - extend_size,  0},
+            {0,                          src_dims[1] - extend_size,  src_dims[2] - extend_size},
+            {src_dims[0] - extend_size,  0,                          0},
+            {src_dims[0] - extend_size,  0,                          src_dims[2] - extend_size},
+            {src_dims[0] - extend_size,  src_dims[1] - extend_size,  0},
+            {src_dims[0] - extend_size,  src_dims[1] - extend_size,  src_dims[2] - extend_size},
+        };
+        int recv_idx[8][3] = {
+            {0,                           0,                           0},
+            {0,                           0,                           dest_dims[2] - extend_size},
+            {0,                           dest_dims[1] - extend_size,  0},
+            {0,                           dest_dims[1] - extend_size,  dest_dims[2] - extend_size},
+            {dest_dims[0] - extend_size,  0,                           0},
+            {dest_dims[0] - extend_size,  0,                           dest_dims[2] - extend_size},
+            {dest_dims[0] - extend_size,  dest_dims[1] - extend_size,  0},
+            {dest_dims[0] - extend_size,  dest_dims[1] - extend_size,  dest_dims[2] - extend_size},
+        };
+        int subsizes[3] = {extend_size, extend_size, extend_size};
+        for (int ci = 0; ci < 8; ci++) {
+            bool valid = true;
+            for (int j = 0; j < 3; j++)
+                if (target_coords[ci][j] < 0 || target_coords[ci][j] >= mpi_dims[j]) { valid = false; break; }
+            if (!valid) continue;
+            int target_rank; MPI_Cart_rank(cart_comm, target_coords[ci], &target_rank);
+            post(target_rank, send_idx[ci], recv_idx[ci], subsizes);
+        }
+    }
+
+    MPI_Waitall((int)requests.size(), requests.data(), MPI_STATUSES_IGNORE);
+    for (auto& t : types) MPI_Type_free(&t);
+}
+
+// Non-blocking version of data_exchange3d (extend_size == 1 specialisation).
+template <typename T>
+void data_exchange3d_nb(T* src, int* src_dims, size_t* src_strides, T* dest, int* dest_dims, size_t* dest_strides,
+                        int* mpi_coords, int* mpi_dims, MPI_Comm& cart_comm) {
+    data_exchange3d_extended_nb(src, src_dims, src_strides, dest, dest_dims, dest_strides,
+                                1, mpi_coords, mpi_dims, cart_comm);
 }
 
 #endif  // MPI_DATA_EXCHANGE_HPP

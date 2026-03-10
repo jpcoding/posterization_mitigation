@@ -25,6 +25,13 @@ enum class CPUIndexMode {
     Flat32
 };
 
+enum class WeightMode {
+    IDW,        // w = d2/(d1+d2)  [default, p=1 Shepard]
+    PowerIDW,   // w = d2^p/(d1^p+d2^p)  [p=2 classic Shepard]
+    Smoothstep, // w = smoothstep(d2/(d1+d2)), C1-smooth, no parameters
+    RBF         // two-point inverse-multiquadric RBF (needs indexes from EDT)
+};
+
 template <typename T_data, typename T_quant>
 class Compensation {
    public:
@@ -50,11 +57,48 @@ class Compensation {
 
     void set_edt_thread_num(int num_threads) { this->edt_thread_num = num_threads; }
 
-    void set_use_rbf(bool use_rbf) { this->use_rbf = use_rbf; }
+    void set_use_rbf(bool use_rbf) { this->weight_mode = use_rbf ? WeightMode::RBF : WeightMode::IDW; }
+    void set_weight_mode(WeightMode m) { this->weight_mode = m; }
+    void set_idw_power(double p) { this->idw_power = p; }
 
     void set_frequent_quant_index(T_quant index) { this->frequent_quant_index = index; }
 
-    void set_downsample_edt_round2(bool v) { this->downsample_edt_round2 = v; }
+    void set_downsample_edt_round2(bool v) { this->downsample_r2_factor = v ? 2 : 0; }
+    // factor: 0=full-res (off), 2=2x, 4=4x, 8=8x downsample for EDT round 2
+    void set_downsample_r2_factor(int factor) { this->downsample_r2_factor = factor; }
+
+    // r_i = c_sign * c_geom  (both off by default — baseline unchanged)
+    //
+    // c_sign: scale compensation by the fraction of immediate face-neighbors
+    //   with a different quant_index whose implied sign agrees with sign_map[i].
+    //   If no neighbors differ, c_sign = 1 (unchallenged — handled by c_geom).
+    //
+    // c_geom: attenuate compensation for points far from any boundary.
+    //   c_geom = min(1, geo_scale / d1), where d1 is EDT round-1 distance.
+    //   Controls harm in large homogeneous plateau regions (baryon_density etc).
+    //
+    // geo_auto: derive geo_scale from the d1 distribution (no original data needed).
+    //   geo_scale = percentile(d1, geo_percentile).  Default percentile = 10.
+    //   For dense-boundary fields (velocity): d1_p10 is small → c_geom ≈ 1 (minimal change).
+    //   For sparse-boundary fields (baryon): d1_p10 is large → aggressive attenuation of
+    //   deep-plateau voxels.  This is the correct proxy when PSNR is unavailable.
+    void set_sign_certainty(bool v) { use_sign_certainty = v; }
+    void set_geo_attenuation(bool v) { use_geo_attenuation = v; }
+    void set_geo_scale(double s) { geo_scale = s; geo_auto = false; }
+    void set_geo_auto(bool v) { geo_auto = v; }
+    void set_geo_percentile(double p) { geo_percentile = p; }  // 0–100, default 10
+    // Plateau-width attenuation: r *= min(1, plateau_cutoff / (d1+d2)).
+    // When the total plateau is wider than plateau_cutoff, compensation is scaled down
+    // proportionally. Addresses the large-plateau failure mode independently of c_geom
+    // (which only uses d1). Default cutoff = 20 voxels.
+    void set_plateau_attenuation(bool v) { use_plateau_attenuation = v; }
+    void set_plateau_cutoff(double c) { plateau_cutoff = c; }
+    // Skip compensation entirely if boundary fraction < threshold (default 0.001).
+    void set_edge_density_threshold(double t) { edge_density_threshold = t; }
+    // Skip compensation if field sparsity (fraction of non-mode voxels) < threshold (default 0.01).
+    // When sparsity < 0.01, non-mode voxels form incoherent scatter rather than coherent regions,
+    // making EDT sign propagation unreliable at typical d1 distances.
+    void set_sparsity_threshold(double t) { sparsity_threshold = t; }
 
     void set_cpu_index_mode(CPUIndexMode mode) { this->cpu_index_mode = mode; }
 
@@ -343,7 +387,7 @@ class Compensation {
         auto distance_array2 = std::move(edt_result2.distance);
         auto indexes2 = std::move(edt_result2.indexes);
 
-        if (use_rbf == true) {
+        if (weight_mode == WeightMode::RBF) {
             #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 double distance1 = distance_array[i] + 0.5;
@@ -402,9 +446,39 @@ class Compensation {
         auto boundary_map = std::get<0>(bounday_and_sign);
         auto sign_map = std::get<1>(bounday_and_sign);
         char edge_tag = 1;
-        
 
-        
+        // Sparsity guard: sparsity = fraction of non-mode voxels.
+        // When sparsity < threshold, non-mode voxels form incoherent scatter rather than
+        // coherent regions, so EDT sign propagation is unreliable at typical d1 distances.
+        {
+            size_t count = 0;
+            for (size_t i = 0; i < input_size; i++)
+                if (quant_index[i] == frequent_quant_index) count++;
+            double sparsity = 1.0 - (double)count / input_size;
+            std::cout << "Sparsity " << sparsity << std::endl;
+            if (sparsity < sparsity_threshold) {
+                std::cout << "Sparsity " << sparsity
+                          << " < " << sparsity_threshold << ", skipping compensation" << std::endl;
+                return compensation_map;  // all-zero
+            }
+        }
+
+        // Edge-density guard: if fewer than 0.1% of voxels are on a boundary the EDT
+        // sign propagation spans huge distances and is unreliable → skip compensation.
+        // (Same guard as get_compensation_map_2d.)
+        {
+            size_t num_edges = 0;
+            for (size_t i = 0; i < input_size; i++)
+                if (boundary_map[i] == edge_tag) num_edges++;
+            double edge_density = (double)num_edges / input_size;
+            std::cout << "EdgeDensity " << edge_density << std::endl;
+            if (edge_density < edge_density_threshold) {
+                std::cout << "EdgeDensity " << edge_density
+                          << " < " << edge_density_threshold << ", skipping compensation" << std::endl;
+                return compensation_map;  // all-zero
+            }
+        }
+
         // EDT_OMP_Opt auto-selects int8/int16/int32 coord storage based on max dim,
         // halving or quartering the features buffer bandwidth vs the old EDT_OMP.
         auto edt_omp = PM2::EDT_OMP_Opt<T_data>();
@@ -437,6 +511,37 @@ class Compensation {
             indexes = std::move(edt_result.indexes);
         }
         stage_edt1 = stage_timer.stop();
+
+        // Adaptive geo_scale: derive from d1 percentile — no original data needed.
+        // For sparse-boundary fields (baryon_density): d1_p10 is large → aggressive attenuation.
+        // For dense-boundary fields (velocity): d1_p10 is small → c_geom ≈ 1 (minimal effect).
+        if (use_geo_attenuation && geo_auto) {
+            // O(n) histogram over [0, max_d1] with 4096 bins to find percentile.
+            double max_d1 = 0.0;
+            for (size_t i = 0; i < input_size; i++)
+                if (distance_array[i] > max_d1) max_d1 = distance_array[i];
+            if (max_d1 > 0.0) {
+                const int NBINS = 4096;
+                std::vector<size_t> hist(NBINS, 0);
+                double inv_bin = (NBINS - 1) / max_d1;
+                for (size_t i = 0; i < input_size; i++) {
+                    int b = (int)(distance_array[i] * inv_bin);
+                    if (b >= NBINS) b = NBINS - 1;
+                    hist[b]++;
+                }
+                size_t target = (size_t)(geo_percentile / 100.0 * input_size);
+                size_t cum = 0;
+                for (int b = 0; b < NBINS; b++) {
+                    cum += hist[b];
+                    if (cum >= target) {
+                        geo_scale = (b + 1.0) / inv_bin;
+                        break;
+                    }
+                }
+            }
+            std::cout << "AdaptiveGeoScale (p" << geo_percentile << "): " << geo_scale << std::endl;
+        }
+
         auto packed_to_flat = [this](uint32_t packed) -> size_t {
             size_t x = (size_t)((packed >> 20) & 0x3FFu);
             size_t y = (size_t)((packed >> 10) & 0x3FFu);
@@ -506,12 +611,30 @@ class Compensation {
             return std::sqrt(dx * dx + dy * dy + dz * dz);
         };
 
-        if (downsample_edt_round2 && !use_rbf) {
-            // --- Downsampled EDT round 2 (2×2×2 logical-OR downsample → 1/8 volume) ---
-            int ds_dims[3] = {(dims[0] + 1) / 2, (dims[1] + 1) / 2, (dims[2] + 1) / 2};
+        // Weight function: maps (d1, d2) → magnitude ∈ (0,1), always bounded without clamping.
+        auto compute_weight = [this](double d1, double d2) -> double {
+            switch (weight_mode) {
+                case WeightMode::PowerIDW: {
+                    double a = std::pow(d1, idw_power);
+                    double b = std::pow(d2, idw_power);
+                    return b / (a + b);
+                }
+                case WeightMode::Smoothstep: {
+                    double t = d2 / (d1 + d2);  // IDW weight ∈ (0,1)
+                    return t * t * (3.0 - 2.0 * t);
+                }
+                default:  // IDW
+                    return d2 / (d1 + d2);
+            }
+        };
+
+        if (downsample_r2_factor >= 2 && weight_mode != WeightMode::RBF) {
+            // --- Downsampled EDT round 2 (factor×factor×factor logical-OR downsample) ---
+            const int F = downsample_r2_factor;
+            int ds_dims[3] = {(dims[0] + F - 1) / F, (dims[1] + F - 1) / F, (dims[2] + F - 1) / F};
             size_t ds_size = (size_t)ds_dims[0] * ds_dims[1] * ds_dims[2];
 
-            // 2×2×2 logical-OR downsample of boundary_map2
+            // F×F×F logical-OR downsample of boundary_map2
             stage_timer.start();
             std::vector<char> ds_boundary(ds_size, 0);
             for (size_t i = 0; i < input_size; i++) {
@@ -519,7 +642,7 @@ class Compensation {
                     int x = i / (dims[1] * dims[2]);
                     int y = (i / dims[2]) % dims[1];
                     int z = i % dims[2];
-                    ds_boundary[(size_t)(x / 2) * ds_dims[1] * ds_dims[2] + (y / 2) * ds_dims[2] + (z / 2)] = 1;
+                    ds_boundary[(size_t)(x / F) * ds_dims[1] * ds_dims[2] + (y / F) * ds_dims[2] + (z / F)] = 1;
                 }
             }
             stage_downsample_boundary = stage_timer.stop();
@@ -533,6 +656,7 @@ class Compensation {
 
             // IDW compensation with trilinear interpolation of downsampled d_neutral
             stage_timer.start();
+            const double Fd = (double)F;
 #pragma omp parallel for num_threads(edt_thread_num)
             for (size_t i = 0; i < input_size; i++) {
                 double d1 = distance_array[i] + 0.5;
@@ -543,10 +667,10 @@ class Compensation {
                 int z = i % dims[2];
 
                 // Map full-res coord to downsampled coord
-                // DS voxel center i is at full-res 2*i+0.5, so fx = (x+0.5)/2 - 0.5
-                double fx = (x + 0.5) * 0.5 - 0.5;
-                double fy = (y + 0.5) * 0.5 - 0.5;
-                double fz = (z + 0.5) * 0.5 - 0.5;
+                // DS voxel center j is at full-res F*j+(F-1)/2, so fx = (x+0.5)/F - 0.5
+                double fx = (x + 0.5) / Fd - 0.5;
+                double fy = (y + 0.5) / Fd - 0.5;
+                double fz = (z + 0.5) / Fd - 0.5;
 
                 int x0 = (int)std::floor(fx), y0 = (int)std::floor(fy), z0 = (int)std::floor(fz);
                 double wx = fx - x0, wy = fy - y0, wz = fz - z0;
@@ -568,13 +692,38 @@ class Compensation {
                               + ds_distance[ds_idx(x0,y1,z1)] * (1-wx)*wy   *wz
                               + ds_distance[ds_idx(x1,y1,z1)] * wx   *wy   *wz;
                 // Scale ds units → full-res, then add the standard +0.5 offset
-                double d2 = d2_raw * 2.0 + 0.5;
+                double d2 = d2_raw * Fd + 0.5;
 
-                double magnitude = (1.0 / d1) / (1.0 / d1 + 1.0 / d2);
-                compensation_map[i] = sign * magnitude * comepnsation_value;
+                double magnitude = compute_weight(d1, d2);
+                double r = 1.0;
+                if (use_sign_certainty) {
+                    int cur_q = quant_index[i];
+                    int n_differ = 0, n_agree = 0;
+                    const int ddx[6] = {-1,1,0,0,0,0};
+                    const int ddy[6] = {0,0,-1,1,0,0};
+                    const int ddz[6] = {0,0,0,0,-1,1};
+                    for (int d = 0; d < 6; d++) {
+                        int nx2 = x + ddx[d], ny2 = y + ddy[d], nz2 = z + ddz[d];
+                        if (nx2 < 0 || nx2 >= dims[0] || ny2 < 0 || ny2 >= dims[1] || nz2 < 0 || nz2 >= dims[2]) continue;
+                        int nq = quant_index[(size_t)nx2 * dims[1] * dims[2] + ny2 * dims[2] + nz2];
+                        if (nq != cur_q) {
+                            n_differ++;
+                            char implied = (cur_q > nq) ? (char)1 : (char)-1;
+                            if (implied == sign) n_agree++;
+                        }
+                    }
+                    if (n_differ > 0) r *= (double)n_agree / n_differ;
+                }
+                if (use_geo_attenuation) {
+                    r *= std::min(1.0, geo_scale / d1);
+                }
+                if (use_plateau_attenuation) {
+                    r *= std::min(1.0, plateau_cutoff / (d1 + d2));
+                }
+                compensation_map[i] = sign * r * magnitude * comepnsation_value;
             }
             stage_comp = stage_timer.stop();
-        } else if (use_rbf) {
+        } else if (weight_mode == WeightMode::RBF) {
             // --- Full-resolution EDT round 2, RBF path (needs indexes2 for cal_distance) ---
             std::unique_ptr<T_data[]> distance_array2;
             std::unique_ptr<size_t[]> indexes2;
@@ -636,8 +785,41 @@ class Compensation {
                 double distance1 = distance_array[i] + 0.5;
                 double distance2 = distance_array2[i] + 0.5;
                 char sign = sign_map[i];
-                double magnitude = (1 / distance1) / (1 / distance1 + 1 / distance2);
-                compensation_map[i] = sign * magnitude * comepnsation_value;
+                double magnitude = compute_weight(distance1, distance2);
+                double r = 1.0;
+                if (use_sign_certainty) {
+                    int x = i / (dims[1] * dims[2]);
+                    int y = (i / dims[2]) % dims[1];
+                    int z = i % dims[2];
+                    int cur_q = quant_index[i];
+                    int n_differ = 0, n_agree = 0;
+                    // d=0,2,4: negative-index step → implied = sign(cur_q - nq)
+                    // d=1,3,5: positive-index step → implied = sign(nq   - cur_q)
+                    // mirrors boundary detection: left=sign(cur-nb), right=sign(nb-cur)
+                    const int ddx[6] = {-1,1,0,0,0,0};
+                    const int ddy[6] = {0,0,-1,1,0,0};
+                    const int ddz[6] = {0,0,0,0,-1,1};
+                    for (int d = 0; d < 6; d++) {
+                        int nx = x + ddx[d], ny = y + ddy[d], nz = z + ddz[d];
+                        if (nx < 0 || nx >= dims[0] || ny < 0 || ny >= dims[1] || nz < 0 || nz >= dims[2]) continue;
+                        int nq = quant_index[(size_t)nx * dims[1] * dims[2] + ny * dims[2] + nz];
+                        if (nq != cur_q) {
+                            n_differ++;
+                            char implied = (d % 2 == 0) ?
+                                ((cur_q > nq) ? (char)1 : (char)-1) :
+                                ((nq > cur_q) ? (char)1 : (char)-1);
+                            if (implied == sign) n_agree++;
+                        }
+                    }
+                    if (n_differ > 0) r *= (double)n_agree / n_differ;
+                }
+                if (use_geo_attenuation) {
+                    r *= std::min(1.0, geo_scale / distance1);
+                }
+                if (use_plateau_attenuation) {
+                    r *= std::min(1.0, plateau_cutoff / (distance1 + distance2));
+                }
+                compensation_map[i] = sign * r * magnitude * comepnsation_value;
             }
             stage_comp = stage_timer.stop();
         }
@@ -868,8 +1050,21 @@ class Compensation {
     char *boundary_map;
     int edt_thread_num = 8;  // the thread number for edt computing
     double edt_time = 0.0;
-    bool use_rbf = false;
-    bool downsample_edt_round2 = false;
+    WeightMode weight_mode = WeightMode::IDW;
+    double idw_power = 2.0;        // exponent for WeightMode::PowerIDW
+    int downsample_r2_factor = 0;  // 0=off, 2/4/8=downsample factor for EDT round 2
+    bool use_sign_certainty = false;
+    bool use_geo_attenuation = false;
+    double geo_scale = 3.0;
+    bool use_plateau_attenuation = false;
+    double plateau_cutoff = 20.0;  // voxels; full comp when d1+d2 <= cutoff
+    bool geo_auto = false;        // if true, derive geo_scale from d1 percentile
+    double geo_percentile = 10.0; // percentile of d1 used as geo_scale when geo_auto=true
+    double edge_density_threshold = 0.001; // skip compensation if boundary fraction < this
+    double sparsity_threshold = 0.10;     // skip compensation if non-mode fraction < this
+                                          // 0.10 empirically validated on NYX+Hurricane:
+                                          // catches background-dominant fields (Q* mixing ratios)
+                                          // while preserving compensation for smooth fields
     CPUIndexMode cpu_index_mode = CPUIndexMode::PackedXYZ32;
     std::vector<T_data> distance_array1;
     T_quant frequent_quant_index = 0;
