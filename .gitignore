@@ -5,4 +5,5 @@ build*
 .cache
 debug*
 install*
-script
+script/*logs
+script/*plots

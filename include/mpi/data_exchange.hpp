@@ -754,4 +754,176 @@ void data_exchange3d_nb(T* src, int* src_dims, size_t* src_strides, T* dest, int
                                 1, mpi_coords, mpi_dims, cart_comm);
 }
 
+// ---------------------------------------------------------------------------
+// Persistent-request context: types and requests are created once at setup
+// and reused across calls.  Each exchange call costs only local-copy +
+// MPI_Startall + MPI_Waitall — no type creation, no vector allocation.
+//
+// Usage:
+//   auto ctx = make_exchange_context(src, ..., dest, ..., extend, coords, dims, comm);
+//   for (each timestep) exchange(ctx);   // cheap hot path
+//   free_exchange_context(ctx);
+// ---------------------------------------------------------------------------
+
+// Internal helper: call callback(target_rank, ss[3], ds[3], subsizes[3]) for
+// every valid neighbor (up to 26) in the 3-D Cartesian decomposition.
+template <typename Fn>
+void _for_each_neighbor_3d(int* src_dims, int* dest_dims, int extend_size,
+                            int* mpi_coords, int* mpi_dims, MPI_Comm& cart_comm,
+                            Fn callback) {
+    // --- 6 faces ---
+    for (int i = 0; i < 3; i++) {
+        int fi1 = (i+1)%3, fi2 = (i+2)%3;
+        int subsizes[3] = {src_dims[0], src_dims[1], src_dims[2]};
+        subsizes[i] = extend_size;
+        if (mpi_coords[i] != mpi_dims[i]-1) {
+            int rc[3] = {mpi_coords[0], mpi_coords[1], mpi_coords[2]}; rc[i] = mpi_coords[i]+1;
+            int tr; MPI_Cart_rank(cart_comm, rc, &tr);
+            int ss[3]={0,0,0}; ss[i] = src_dims[i]-extend_size;
+            int ds[3]={0,0,0};
+            ds[i]   = mpi_coords[i]   == 0 ? src_dims[i]   : src_dims[i]  +extend_size;
+            ds[fi1] = mpi_coords[fi1] == 0 ? 0             : extend_size;
+            ds[fi2] = mpi_coords[fi2] == 0 ? 0             : extend_size;
+            callback(tr, ss, ds, subsizes);
+        }
+        if (mpi_coords[i] != 0) {
+            int rc[3] = {mpi_coords[0], mpi_coords[1], mpi_coords[2]}; rc[i] = mpi_coords[i]-1;
+            int tr; MPI_Cart_rank(cart_comm, rc, &tr);
+            int ss[3]={0,0,0};
+            int ds[3]={0,0,0};
+            ds[fi1] = mpi_coords[fi1] == 0 ? 0 : extend_size;
+            ds[fi2] = mpi_coords[fi2] == 0 ? 0 : extend_size;
+            callback(tr, ss, ds, subsizes);
+        }
+    }
+    // --- 12 edges ---
+    for (int d1 = 0; d1 < 3; d1++) {
+        int d2 = (d1+1)%3, d3 = (d1+2)%3;
+        int subsizes[3] = {src_dims[0], src_dims[1], src_dims[2]};
+        subsizes[d2] = extend_size; subsizes[d3] = extend_size;
+        auto edge = [&](int dv2, int dv3, int ss2, int ss3, int ds2, int ds3) {
+            int rc[3] = {mpi_coords[0], mpi_coords[1], mpi_coords[2]};
+            rc[d2] = mpi_coords[d2]+dv2; rc[d3] = mpi_coords[d3]+dv3;
+            int tr; MPI_Cart_rank(cart_comm, rc, &tr);
+            int ss[3]={0,0,0}; ss[d2]=ss2; ss[d3]=ss3;
+            int ds[3]={0,0,0};
+            ds[d1] = mpi_coords[d1]==0 ? 0 : extend_size;
+            ds[d2]=ds2; ds[d3]=ds3;
+            callback(tr, ss, ds, subsizes);
+        };
+        if (mpi_coords[d2]!=0              && mpi_coords[d3]!=0)              edge(-1,-1,0,0,0,0);
+        if (mpi_coords[d2]!=0              && mpi_coords[d3]!=mpi_dims[d3]-1) edge(-1,+1,0,src_dims[d3]-extend_size,0,dest_dims[d3]-extend_size);
+        if (mpi_coords[d2]!=mpi_dims[d2]-1 && mpi_coords[d3]!=0)              edge(+1,-1,src_dims[d2]-extend_size,0,dest_dims[d2]-extend_size,0);
+        if (mpi_coords[d2]!=mpi_dims[d2]-1 && mpi_coords[d3]!=mpi_dims[d3]-1) edge(+1,+1,src_dims[d2]-extend_size,src_dims[d3]-extend_size,dest_dims[d2]-extend_size,dest_dims[d3]-extend_size);
+    }
+    // --- 8 corners ---
+    {
+        int tc[8][3]={{mpi_coords[0]-1,mpi_coords[1]-1,mpi_coords[2]-1},{mpi_coords[0]-1,mpi_coords[1]-1,mpi_coords[2]+1},
+                      {mpi_coords[0]-1,mpi_coords[1]+1,mpi_coords[2]-1},{mpi_coords[0]-1,mpi_coords[1]+1,mpi_coords[2]+1},
+                      {mpi_coords[0]+1,mpi_coords[1]-1,mpi_coords[2]-1},{mpi_coords[0]+1,mpi_coords[1]-1,mpi_coords[2]+1},
+                      {mpi_coords[0]+1,mpi_coords[1]+1,mpi_coords[2]-1},{mpi_coords[0]+1,mpi_coords[1]+1,mpi_coords[2]+1}};
+        int si[8][3]={{0,0,0},{0,0,src_dims[2]-extend_size},{0,src_dims[1]-extend_size,0},{0,src_dims[1]-extend_size,src_dims[2]-extend_size},
+                      {src_dims[0]-extend_size,0,0},{src_dims[0]-extend_size,0,src_dims[2]-extend_size},
+                      {src_dims[0]-extend_size,src_dims[1]-extend_size,0},{src_dims[0]-extend_size,src_dims[1]-extend_size,src_dims[2]-extend_size}};
+        int ri[8][3]={{0,0,0},{0,0,dest_dims[2]-extend_size},{0,dest_dims[1]-extend_size,0},{0,dest_dims[1]-extend_size,dest_dims[2]-extend_size},
+                      {dest_dims[0]-extend_size,0,0},{dest_dims[0]-extend_size,0,dest_dims[2]-extend_size},
+                      {dest_dims[0]-extend_size,dest_dims[1]-extend_size,0},{dest_dims[0]-extend_size,dest_dims[1]-extend_size,dest_dims[2]-extend_size}};
+        int subsizes[3]={extend_size,extend_size,extend_size};
+        for (int ci=0; ci<8; ci++) {
+            bool valid=true;
+            for (int j=0; j<3; j++) if(tc[ci][j]<0||tc[ci][j]>=mpi_dims[j]){valid=false;break;}
+            if (!valid) continue;
+            int tr; MPI_Cart_rank(cart_comm, tc[ci], &tr);
+            callback(tr, si[ci], ri[ci], subsizes);
+        }
+    }
+}
+
+template <typename T>
+struct ExchangeContext3D {
+    T*                        src;
+    T*                        dest;
+    int                       src_dims[3];
+    size_t                    src_strides[3];
+    size_t                    dest_strides[3];
+    int                       extend_size;
+    int                       mpi_coords[3];
+    std::vector<MPI_Datatype> types;  // committed send+recv types
+    std::vector<MPI_Request>  reqs;   // persistent send+recv requests
+
+    // Non-copyable: MPI handles must not be aliased.
+    ExchangeContext3D() = default;
+    ExchangeContext3D(const ExchangeContext3D&) = delete;
+    ExchangeContext3D& operator=(const ExchangeContext3D&) = delete;
+    ExchangeContext3D(ExchangeContext3D&&) = default;
+    ExchangeContext3D& operator=(ExchangeContext3D&&) = default;
+};
+
+template <typename T>
+ExchangeContext3D<T> make_exchange_context(
+        T* src, int* src_dims, size_t* src_strides,
+        T* dest, int* dest_dims, size_t* dest_strides,
+        int extend_size, int* mpi_coords, int* mpi_dims, MPI_Comm& cart_comm) {
+    ExchangeContext3D<T> ctx;
+    ctx.src = src; ctx.dest = dest; ctx.extend_size = extend_size;
+    for (int d = 0; d < 3; d++) {
+        ctx.src_dims[d]     = src_dims[d];
+        ctx.src_strides[d]  = src_strides[d];
+        ctx.dest_strides[d] = dest_strides[d];
+        ctx.mpi_coords[d]   = mpi_coords[d];
+    }
+
+    MPI_Datatype mpi_type = mpi_get_type<T>();
+    int ndims = 3;
+
+    _for_each_neighbor_3d(src_dims, dest_dims, extend_size, mpi_coords, mpi_dims, cart_comm,
+        [&](int target_rank, int* ss, int* ds, int* subsizes) {
+            MPI_Datatype st, rt;
+            MPI_Type_create_subarray(ndims, src_dims,  subsizes, ss, MPI_ORDER_C, mpi_type, &st);
+            MPI_Type_commit(&st);
+            MPI_Type_create_subarray(ndims, dest_dims, subsizes, ds, MPI_ORDER_C, mpi_type, &rt);
+            MPI_Type_commit(&rt);
+            ctx.types.push_back(st);
+            ctx.types.push_back(rt);
+            MPI_Request rs, rr;
+            MPI_Send_init(src,  1, st, target_rank, 0, cart_comm, &rs);
+            MPI_Recv_init(dest, 1, rt, target_rank, 0, cart_comm, &rr);
+            ctx.reqs.push_back(rs);
+            ctx.reqs.push_back(rr);
+        });
+
+    return ctx;
+}
+
+// Hot path: local copy + Startall + Waitall.  No allocation, no type creation.
+template <typename T>
+void exchange(ExchangeContext3D<T>& ctx) {
+    int* sd = ctx.src_dims;
+    int  es = ctx.extend_size;
+    int* mc = ctx.mpi_coords;
+    for (int i = 0; i < sd[0]; i++) {
+        int w_i = mc[0] == 0 ? i : i + es;
+        for (int j = 0; j < sd[1]; j++) {
+            int w_j = mc[1] == 0 ? j : j + es;
+            for (int k = 0; k < sd[2]; k++) {
+                int w_k = mc[2] == 0 ? k : k + es;
+                ctx.dest[w_i*ctx.dest_strides[0] + w_j*ctx.dest_strides[1] + w_k*ctx.dest_strides[2]] =
+                    ctx.src[i*ctx.src_strides[0]  + j*ctx.src_strides[1]  + k*ctx.src_strides[2]];
+            }
+        }
+    }
+    if (!ctx.reqs.empty()) {
+        MPI_Startall((int)ctx.reqs.size(), ctx.reqs.data());
+        MPI_Waitall((int)ctx.reqs.size(), ctx.reqs.data(), MPI_STATUSES_IGNORE);
+    }
+}
+
+template <typename T>
+void free_exchange_context(ExchangeContext3D<T>& ctx) {
+    for (auto& r : ctx.reqs)  MPI_Request_free(&r);
+    for (auto& t : ctx.types) MPI_Type_free(&t);
+    ctx.reqs.clear();
+    ctx.types.clear();
+}
+
 #endif  // MPI_DATA_EXCHANGE_HPP
