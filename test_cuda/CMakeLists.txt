@@ -15,4 +15,5 @@ set(CUDA_TARGETS
 
 foreach(target ${CUDA_TARGETS})
     target_include_directories(${target} BEFORE PRIVATE ${CUDA_INCLUDE_DIR})
+    target_link_libraries(${target} PRIVATE stdc++)
 endforeach()
