@@ -5,9 +5,50 @@
 1. **Downsampled EDT round 2** — quality/performance tradeoff (1.51x CPU speedup, -0.064 dB on NYX 512^3)
 2. **Full CUDA implementation** — PBA+, JFA, boundary/compensation kernels (3.7x cuSZ throughput)
 3. **CPU optimizations** — packed indexes, flat32 indexes, dist-only EDT, coord-type auto-selection
-4. **Controlled compensation / deterioration prevention** (new, see below)
-5. **Plateau-width attenuation (c_plateau)** — new confidence factor, orthogonal to c_geom (see below)
-6. **Weight function ablation** — validates IDW as theoretically and empirically optimal (see below)
+4. **CPU micro-optimizations** (2026-03-14) — collapse(2) in boundary detect, fused neutral-boundary filter, parallel output-driven downsample, division-free triple-loop compensation. ~9% end-to-end speedup on NYX velocity_x rel eb=0.01 (2562 ms vs 2816 ms). See details below.
+5. **Controlled compensation / deterioration prevention** (new, see below)
+6. **Plateau-width attenuation (c_plateau)** — new confidence factor, orthogonal to c_geom (see below)
+7. **Weight function ablation** — validates IDW as theoretically and empirically optimal (see below)
+
+---
+
+## CPU Micro-Optimizations (2026-03-14)
+
+Four targeted fixes in `include/get_boundary.hpp` and `include/compensation.hpp`.
+All changes preserve output exactly (PSNR unchanged to 6 sig figs).
+
+### 1. `collapse(2)` in boundary detection
+`get_boundary_3d` and `get_boundary_and_sign_map_3d` used `#pragma omp parallel for collapse(1)`.
+Changed to `collapse(2)` — exposes `dims[0]*dims[1]` work items instead of `dims[0]`.
+Helps most on Hurricane (dim0=100): 100 → 49,900 parallel work items.
+
+### 2. Fused neutral-boundary filter
+Old: `get_boundary(sign_map)` then a second `parallel for` to zero positions where `boundary_map2 & boundary_map` both set.
+New: `get_boundary_3d` accepts `const char* exclude_mask = nullptr`. Single pass does both.
+Removed one full O(n) parallel sweep from `neutral_boundary` stage.
+`neutral_boundary`: 100 ms → 89 ms at rel eb=0.01.
+
+### 3. Parallel output-driven downsample boundary
+Old: serial flat scan over all `input_size` voxels with 5 integer divisions per hit.
+New: `#pragma omp parallel for collapse(2)` over ds-grid voxels; each thread checks its F×F×F block.
+No divisions; early-exit per block; fully parallel.
+`downsample_boundary`: 163 ms → 30 ms at rel eb=0.01 (**5.4×**).
+
+### 4. Division-free compensation loops
+Both the downsampled IDW loop and the full-res IDW `else` branch iterated with flat index `i`,
+decomposing to `x,y,z` via `i/(dims[1]*dims[2])` etc. inside the hot loop.
+Converted both to triple nested `for(x) for(y) for(z)` with `#pragma omp parallel for collapse(2)`.
+Precomputed `s0 = dims[1]*dims[2]`, `s1 = dims[2]` outside the loop.
+`compensation` stage: 209 ms → 144 ms at rel eb=0.01 (**1.5×**).
+
+### Benchmark summary (NYX 512³ velocity_x, rel eb=0.01, ds=2, 16 threads)
+| Stage | Before | After | Speedup |
+|---|---|---|---|
+| neutral_boundary | 100 ms | 89 ms | 1.1× |
+| downsample_boundary | 163 ms | 30 ms | 5.4× |
+| compensation | 209 ms | 144 ms | 1.5× |
+| **Total** | **2816 ms** | **2562 ms** | **~9%** |
+PSNR: 54.11 dB (unchanged). Compensation gain: +9.35 dB over raw decompressed output.
 
 ### What Would Strengthen the Submission
 - Multi-GPU / multi-node GPU scalability study

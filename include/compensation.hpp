@@ -568,13 +568,10 @@ class Compensation {
         // dump the sign map
 
         stage_timer.start();
-        auto boundary_map2 = get_boundary(sign_map.data(), N, dims.data(), edt_thread_num);
-#pragma omp parallel for num_threads(edt_thread_num)
-        for (int i = 0; i < input_size; i++) {
-            if (boundary_map2[i] == edge_tag && boundary_map[i] == edge_tag) {
-                boundary_map2[i] = 0;  // boundary lable
-            }
-        }
+        // exclude_mask = boundary_map: positions that are on the original boundary are
+        // excluded from boundary_map2, keeping only "neutral" (sign-change) boundaries
+        auto boundary_map2 = get_boundary(sign_map.data(), N, dims.data(), edt_thread_num,
+                                          boundary_map.data());
         stage_neutral_boundary = stage_timer.stop();
 
         auto rbf = [](double r) -> double {
@@ -634,15 +631,25 @@ class Compensation {
             int ds_dims[3] = {(dims[0] + F - 1) / F, (dims[1] + F - 1) / F, (dims[2] + F - 1) / F};
             size_t ds_size = (size_t)ds_dims[0] * ds_dims[1] * ds_dims[2];
 
-            // F×F×F logical-OR downsample of boundary_map2
+            // F×F×F logical-OR downsample of boundary_map2 (output-driven, OMP-parallel)
             stage_timer.start();
             std::vector<char> ds_boundary(ds_size, 0);
-            for (size_t i = 0; i < input_size; i++) {
-                if (boundary_map2[i] != 0) {
-                    int x = i / (dims[1] * dims[2]);
-                    int y = (i / dims[2]) % dims[1];
-                    int z = i % dims[2];
-                    ds_boundary[(size_t)(x / F) * ds_dims[1] * ds_dims[2] + (y / F) * ds_dims[2] + (z / F)] = 1;
+            const size_t s0 = (size_t)dims[1] * dims[2], s1 = dims[2];
+            const size_t ds_s0 = (size_t)ds_dims[1] * ds_dims[2], ds_s1 = ds_dims[2];
+#pragma omp parallel for collapse(2) num_threads(edt_thread_num)
+            for (int dx = 0; dx < ds_dims[0]; dx++) {
+                for (int dy = 0; dy < ds_dims[1]; dy++) {
+                    const int x_end = std::min(dx * F + F, dims[0]);
+                    const int y_end = std::min(dy * F + F, dims[1]);
+                    for (int dz = 0; dz < ds_dims[2]; dz++) {
+                        const int z_end = std::min(dz * F + F, dims[2]);
+                        char val = 0;
+                        for (int fx = dx * F; fx < x_end && !val; fx++)
+                            for (int fy = dy * F; fy < y_end && !val; fy++)
+                                for (int fz = dz * F; fz < z_end && !val; fz++)
+                                    if (boundary_map2[(size_t)fx * s0 + fy * s1 + fz]) val = 1;
+                        ds_boundary[dx * ds_s0 + dy * ds_s1 + dz] = val;
+                    }
                 }
             }
             stage_downsample_boundary = stage_timer.stop();
@@ -657,14 +664,14 @@ class Compensation {
             // IDW compensation with trilinear interpolation of downsampled d_neutral
             stage_timer.start();
             const double Fd = (double)F;
-#pragma omp parallel for num_threads(edt_thread_num)
-            for (size_t i = 0; i < input_size; i++) {
+#pragma omp parallel for collapse(2) num_threads(edt_thread_num)
+            for (int x = 0; x < dims[0]; x++) {
+            for (int y = 0; y < dims[1]; y++) {
+            for (int z = 0; z < dims[2]; z++) {
+                size_t i = (size_t)x * s0 + y * s1 + z;
+                {
                 double d1 = distance_array[i] + 0.5;
                 char sign = sign_map[i];
-
-                int x = i / (dims[1] * dims[2]);
-                int y = (i / dims[2]) % dims[1];
-                int z = i % dims[2];
 
                 // Map full-res coord to downsampled coord
                 // DS voxel center j is at full-res F*j+(F-1)/2, so fx = (x+0.5)/F - 0.5
@@ -705,7 +712,7 @@ class Compensation {
                     for (int d = 0; d < 6; d++) {
                         int nx2 = x + ddx[d], ny2 = y + ddy[d], nz2 = z + ddz[d];
                         if (nx2 < 0 || nx2 >= dims[0] || ny2 < 0 || ny2 >= dims[1] || nz2 < 0 || nz2 >= dims[2]) continue;
-                        int nq = quant_index[(size_t)nx2 * dims[1] * dims[2] + ny2 * dims[2] + nz2];
+                        int nq = quant_index[(size_t)nx2 * s0 + ny2 * s1 + nz2];
                         if (nq != cur_q) {
                             n_differ++;
                             char implied = (cur_q > nq) ? (char)1 : (char)-1;
@@ -721,7 +728,8 @@ class Compensation {
                     r *= std::min(1.0, plateau_cutoff / (d1 + d2));
                 }
                 compensation_map[i] = sign * r * magnitude * comepnsation_value;
-            }
+                } // inner block
+            }}}   // z, y, x
             stage_comp = stage_timer.stop();
         } else if (weight_mode == WeightMode::RBF) {
             // --- Full-resolution EDT round 2, RBF path (needs indexes2 for cal_distance) ---
@@ -780,17 +788,18 @@ class Compensation {
                 boundary_map2.data(), N, dims.data(), edt_thread_num);
             stage_edt2 = stage_timer.stop();
             stage_timer.start();
-#pragma omp parallel for num_threads(edt_thread_num)
-            for (size_t i = 0; i < input_size; i++) {
+            const size_t r2_s0 = (size_t)dims[1] * dims[2], r2_s1 = dims[2];
+#pragma omp parallel for collapse(2) num_threads(edt_thread_num)
+            for (int x = 0; x < dims[0]; x++) {
+            for (int y = 0; y < dims[1]; y++) {
+            for (int z = 0; z < dims[2]; z++) {
+                size_t i = (size_t)x * r2_s0 + y * r2_s1 + z;
                 double distance1 = distance_array[i] + 0.5;
                 double distance2 = distance_array2[i] + 0.5;
                 char sign = sign_map[i];
                 double magnitude = compute_weight(distance1, distance2);
                 double r = 1.0;
                 if (use_sign_certainty) {
-                    int x = i / (dims[1] * dims[2]);
-                    int y = (i / dims[2]) % dims[1];
-                    int z = i % dims[2];
                     int cur_q = quant_index[i];
                     int n_differ = 0, n_agree = 0;
                     // d=0,2,4: negative-index step → implied = sign(cur_q - nq)
@@ -802,7 +811,7 @@ class Compensation {
                     for (int d = 0; d < 6; d++) {
                         int nx = x + ddx[d], ny = y + ddy[d], nz = z + ddz[d];
                         if (nx < 0 || nx >= dims[0] || ny < 0 || ny >= dims[1] || nz < 0 || nz >= dims[2]) continue;
-                        int nq = quant_index[(size_t)nx * dims[1] * dims[2] + ny * dims[2] + nz];
+                        int nq = quant_index[(size_t)nx * r2_s0 + ny * r2_s1 + nz];
                         if (nq != cur_q) {
                             n_differ++;
                             char implied = (d % 2 == 0) ?
@@ -820,7 +829,7 @@ class Compensation {
                     r *= std::min(1.0, plateau_cutoff / (distance1 + distance2));
                 }
                 compensation_map[i] = sign * r * magnitude * comepnsation_value;
-            }
+            }}}  // z, y, x
             stage_comp = stage_timer.stop();
         }
 

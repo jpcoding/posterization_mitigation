@@ -49,8 +49,9 @@ inline std::vector<char> get_boundary_2d(T* quant_index, int N, int* dims) {
     return boundary;
 }
 
-template<typename T> 
-inline std::vector<char> get_boundary_3d(T* quant_index, int N, int* dims, int num_threads = 1) { 
+template<typename T>
+inline std::vector<char> get_boundary_3d(T* quant_index, int N, int* dims, int num_threads = 1,
+                                          const char* exclude_mask = nullptr) {
     // define stride
     size_t stride[3];
     stride[0] = dims[1] * dims[2];
@@ -60,7 +61,7 @@ inline std::vector<char> get_boundary_3d(T* quant_index, int N, int* dims, int n
     std::vector<char> boundary;
     size_t n = dims[0] * dims[1] * dims[2];
     boundary.resize(n, 0);
-    #pragma omp parallel for collapse(1) num_threads(num_threads)
+    #pragma omp parallel for collapse(2) num_threads(num_threads)
     for (size_t i = 1; i < dims[0] - 1; i++) {
         for (size_t j = 1; j < dims[1] - 1; j++) {
             for (size_t k = 1; k < dims[2] - 1; k++) {
@@ -71,7 +72,8 @@ inline std::vector<char> get_boundary_3d(T* quant_index, int N, int* dims, int n
                     quant_index[idx] != quant_index[idx + stride[1]] ||
                     quant_index[idx] != quant_index[idx - stride[2]] ||
                     quant_index[idx] != quant_index[idx + stride[2]]) {
-                    boundary[idx] = 1;
+                    if (!exclude_mask || !exclude_mask[idx])
+                        boundary[idx] = 1;
                 }
             }
         }
@@ -113,12 +115,13 @@ char get_sign(T_data_sign data) {
 
 
 
-template<typename T> 
-std::vector<char> get_boundary(T* quant_index, int N, int* dims, int thread_num = 1 ) {
+template<typename T>
+std::vector<char> get_boundary(T* quant_index, int N, int* dims, int thread_num = 1,
+                               const char* exclude_mask = nullptr) {
     if (N == 2) {
         return get_boundary_2d(quant_index, N, dims);
     } else if (N == 3) {
-        return get_boundary_3d(quant_index, N, dims,thread_num);
+        return get_boundary_3d(quant_index, N, dims, thread_num, exclude_mask);
     } else {
         std::cout << "Error: N should be 2 or 3" << std::endl;
         exit(1);
@@ -187,7 +190,7 @@ inline std::tuple<std::vector<char>, std::vector<char>> get_boundary_and_sign_ma
     // int neighbor_quant[6];
     // char signs[6]; 
 
-    #pragma omp parallel for collapse(1) num_threads(num_threads)
+    #pragma omp parallel for collapse(2) num_threads(num_threads)
     for (size_t i = 1; i < dims[0] - 1; i++) {
         for (size_t j = 1; j < dims[1] - 1; j++) {
             for (size_t k = 1; k < dims[2] - 1; k++) {
