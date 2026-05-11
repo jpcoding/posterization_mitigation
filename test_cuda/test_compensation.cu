@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <algorithm>
+#include <unordered_map>
 #include <vector>
 #include <chrono>
 #include <iostream>
@@ -14,6 +15,40 @@
 #include "edt.hpp"
 #include "edt_jfa.hpp"
 #include "edt_pba.hpp"
+
+// Returns {sparsity, edge_density}. Both are in [0,1].
+// sparsity = fraction of non-mode voxels; edge_density = fraction of boundary voxels.
+static std::pair<double,double> compute_field_stats(
+    const int* quant_inds, size_t N,
+    uint width, uint height, uint depth)
+{
+    // --- sparsity: find mode quant index ---
+    std::unordered_map<int,size_t> freq;
+    freq.reserve(1 << 16);
+    for (size_t i = 0; i < N; i++) freq[quant_inds[i]]++;
+    int mode_q = 0; size_t mode_count = 0;
+    for (auto& kv : freq) if (kv.second > mode_count) { mode_count = kv.second; mode_q = kv.first; }
+    double sparsity = 1.0 - (double)mode_count / N;
+
+    // --- edge density: voxels with at least one face-neighbor of different quant index ---
+    size_t n_edge = 0;
+    const int W = (int)width, H = (int)height, D = (int)depth;
+    for (int z = 0; z < D; z++)
+    for (int y = 0; y < H; y++)
+    for (int x = 0; x < W; x++) {
+        int q = quant_inds[(size_t)z*H*W + y*W + x];
+        bool is_edge = false;
+        if (x>0   && quant_inds[(size_t)z*H*W + y*W + (x-1)] != q) is_edge = true;
+        if (x<W-1 && quant_inds[(size_t)z*H*W + y*W + (x+1)] != q) is_edge = true;
+        if (y>0   && quant_inds[(size_t)z*H*W + (y-1)*W + x] != q) is_edge = true;
+        if (y<H-1 && quant_inds[(size_t)z*H*W + (y+1)*W + x] != q) is_edge = true;
+        if (z>0   && quant_inds[(size_t)(z-1)*H*W + y*W + x] != q) is_edge = true;
+        if (z<D-1 && quant_inds[(size_t)(z+1)*H*W + y*W + x] != q) is_edge = true;
+        if (is_edge) n_edge++;
+    }
+    double edge_density = (double)n_edge / N;
+    return {sparsity, edge_density};
+}
 
 template <typename Type>
 void verify(Type *ori_data, Type *data, size_t num_elements, double &psnr, double &nrmse, double &max_diff) {
@@ -463,8 +498,25 @@ int main(int argc, char** argv)
     verify(input_copy.data(), input_data.data(), file_size, psnr, nrmse, max_diff);
     printf("max quantization error: %.6E\n", max_diff);
 
+    // --- Reliability guards (mirrors CPU compensation.hpp defaults) ---
+    const double sparsity_threshold    = 0.10;
+    const double edge_density_threshold = 0.001;
+    auto [sparsity, edge_density] = compute_field_stats(
+        quant_inds.data(), file_size, width, height, depth);
+    printf("Sparsity %.6f\n", sparsity);
+    printf("EdgeDensity %.6f\n", edge_density);
+    if (sparsity < sparsity_threshold) {
+        printf("Sparsity %.6f < %.3f, skipping compensation\n", sparsity, sparsity_threshold);
+        goto done;
+    }
+    if (edge_density < edge_density_threshold) {
+        printf("EdgeDensity %.6f < %.4f, skipping compensation\n", edge_density, edge_density_threshold);
+        goto done;
+    }
+
     run_cuda(quant_inds.data(), input_data.data(), file_size, width, height, depth,
              max_diff * compensation_factor, use_chunck, edt_method, jfa_level);
+    done:
 
     double psnr2, nrmse2, max_diff2;
     verify(input_copy.data(), input_data.data(), file_size, psnr2, nrmse2, max_diff2);
