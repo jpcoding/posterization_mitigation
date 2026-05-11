@@ -1,5 +1,43 @@
 # TPDS Extension Notes
 
+## IMMEDIATE NEXT STEPS FOR NEXT AGENT (2026-05-11)
+
+### 1. Run GPU sweep — FIRST PRIORITY after reboot
+Machine was rebooted to fix CUDA driver/toolkit mismatch (`cudaGetDeviceCount` was returning 0,
+"forward compatibility was attempted on non supported HW"). After reboot, verify GPU works:
+
+```bash
+/tmp/gpu_query2  # or recompile: nvcc --compiler-bindir gcc-14 -o /tmp/gpu_query2 /tmp/gpu_query2.cu
+```
+
+If GPU is accessible, rebuild CUDA binary and run the sweep:
+```bash
+cd /home/jp/git/posterization_mitigation
+cmake -B build -DCMAKE_CUDA_COMPILER=nvcc -DCMAKE_CUDA_ARCHITECTURES=native \
+      -DCMAKE_CUDA_HOST_COMPILER=gcc-14
+cmake --build build --target test_compensation_cuda -j$(nproc)
+bash script/run_gpu_sweep.sh   # runs all NYX + Hurricane fields, saves gpu_results.csv
+```
+
+Script produces: `script/gpu_results.csv` with per-field PSNR delta + per-stage timing (ms).
+Then commit the CSV and analyze results for the paper GPU evaluation section.
+
+### 2. Paper sections ready to write (data already exists)
+Once GPU results are in, the paper needs:
+- **Ablation table** — Approach 2 (redundant), Approach 3 (harmful), c_geom (adopted), oracle bound (55.73 dB)
+- **Updated evaluation** — IPDPS vs current: `script/comparison_results.csv` has all numbers
+- **GPU evaluation section** — timing breakdown per stage, PSNR delta vs CPU baseline
+- Wire `tex/4b.adaptive_downsampling.tex`, `tex/4c.reliability_guards.tex`, `tex/5b.gpu_parallelization.tex`
+  into `main.tex` (currently drafted but not `\input`'d)
+
+Paper is at: `/home/jp/paper/ipdps_26_Posterization_mitigation/`
+
+### 3. GPU end-to-end (after standalone GPU sweep)
+Integrate CUDA compensation into cuSZ pipeline for end-to-end benchmark.
+cuSZ outputs quant indices on GPU — compensation sits between quantize and entropy code.
+
+---
+
 ## New Contributions Beyond IPDPS '26
 
 1. **Downsampled EDT round 2** — quality/performance tradeoff (1.51x CPU speedup, -0.064 dB on NYX 512^3)
