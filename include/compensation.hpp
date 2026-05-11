@@ -103,6 +103,19 @@ class Compensation {
     // (which only uses d1). Default cutoff = 20 voxels.
     void set_plateau_attenuation(bool v) { use_plateau_attenuation = v; }
     void set_plateau_cutoff(double c) { plateau_cutoff = c; }
+    // Near-edge attenuation (Approach 3): r *= min(1, d1 / d_min).
+    // Attenuates compensation for voxels very close to a boundary (d1 < d_min).
+    // Opposite of c_geom: targets the near-boundary region rather than deep plateaus.
+    // Default d_min = 2.0 voxels.
+    void set_near_edge_attenuation(bool v) { use_near_edge_attenuation = v; }
+    void set_near_edge_d_min(double d) { near_edge_d_min = d; }
+    // Sign-ratio attenuation: r *= min(1, (d2/d1) / threshold) when d2/d1 < threshold.
+    // d2/d1 is a proxy for sign confidence: low ratio means the sign-flip region is closer
+    // than the nearest signed boundary, indicating an ambiguous / likely-wrong sign.
+    // Profile on velocity_x eb=1e-2: 73% of wrong-sign harm events have d2/d1 < 0.5.
+    // Default threshold = 1.0 (attenuate when d2 < d1).
+    void set_sign_ratio_attenuation(bool v) { use_sign_ratio_attenuation = v; }
+    void set_sign_ratio_threshold(double t) { sign_ratio_threshold = t; }
     // Skip compensation entirely if boundary fraction < threshold (default 0.001).
     void set_edge_density_threshold(double t) { edge_density_threshold = t; }
     // Skip compensation if field sparsity (fraction of non-mode voxels) < threshold (default 0.01).
@@ -126,6 +139,22 @@ class Compensation {
     void set_save_distance_maps(bool v) { save_distance_maps = v; }
     const std::vector<T_data>& get_d_edge() const { return d_edge_map; }
     const std::vector<T_data>& get_d_neutral() const { return d_neutral_map; }
+
+    // Smoothness clamp (Approach 2). Second pass after compensation: for each voxel i,
+    // require that |v[i] - v[j] - 2*Δq*eb| ≤ α * 2 * eb for every face neighbor j,
+    // where v = dec + comp and Δq = quant[i] - quant[j]. Intersect the six bands to a
+    // single [v_low, v_high] range and clamp v[i]. Updates comp[i] = v[i] - dec[i].
+    //
+    // α = 1.0 reproduces the worst-case bound (redundant with the re-quant bin clamp
+    // under canonical decompressor). α < 1.0 enforces field smoothness: the actual
+    // original-difference is assumed to be within α*2eb of the bin-center difference.
+    // Implementation is two-pass (uses a scratch comp buffer) so neighbors v[j]
+    // already include their compensation; this lets the constraint propagate
+    // across voxels rather than just clamping each one against dec[j].
+    //
+    // Requires set_eb().
+    void set_smoothness_clamp(bool v) { use_smoothness_clamp = v; }
+    void set_smoothness_alpha(double a) { smoothness_alpha = a; }
 
     void set_cpu_index_mode(CPUIndexMode mode) { this->cpu_index_mode = mode; }
 
@@ -773,6 +802,14 @@ class Compensation {
                 if (use_plateau_attenuation) {
                     r *= std::min(1.0, plateau_cutoff / (d1 + d2));
                 }
+                if (use_near_edge_attenuation) {
+                    r *= std::min(1.0, d1 / near_edge_d_min);
+                }
+                if (use_sign_ratio_attenuation && d1 > 0.0) {
+                    double ratio = d2 / d1;
+                    if (ratio < sign_ratio_threshold)
+                        r *= ratio / sign_ratio_threshold;
+                }
                 compensation_map[i] = sign * r * magnitude * comepnsation_value;
                 if (use_requant_clamp) {
                     // Approach 4: clamp dec_data[i]+comp[i] to original quant bin [2k-1, 2k+1]*eb
@@ -914,6 +951,14 @@ class Compensation {
                 if (use_plateau_attenuation) {
                     r *= std::min(1.0, plateau_cutoff / (distance1 + distance2));
                 }
+                if (use_near_edge_attenuation) {
+                    r *= std::min(1.0, distance1 / near_edge_d_min);
+                }
+                if (use_sign_ratio_attenuation && distance1 > 0.0) {
+                    double ratio = distance2 / distance1;
+                    if (ratio < sign_ratio_threshold)
+                        r *= ratio / sign_ratio_threshold;
+                }
                 compensation_map[i] = sign * r * magnitude * comepnsation_value;
                 if (use_requant_clamp) {
                     double bin_center = 2.0 * eb * (double)quant_index[i];
@@ -934,6 +979,64 @@ class Compensation {
                 std::cout << "RequantClamp (IDW): " << n_clamped
                           << " / " << input_size
                           << " (" << (100.0 * n_clamped / input_size) << "%)" << std::endl;
+            }
+        }
+
+        // ===== Approach 2: post-comp smoothness clamp =====
+        // For each voxel i, intersect the band [v[j] + 2Δq*eb − α*2eb, v[j] + 2Δq*eb + α*2eb]
+        // across the six face neighbors and clamp v[i] = dec[i] + comp[i] to the intersection.
+        // Two-pass: uses a scratch buffer so reads see the pre-clamp compensation_map.
+        if (use_smoothness_clamp) {
+            if (!(eb > 0.0)) {
+                std::cerr << "Warning: --smoothness_clamp enabled but eb<=0; clamp disabled." << std::endl;
+            } else {
+                Timer sm_timer; sm_timer.start();
+                const size_t sm_s0 = (size_t)dims[1] * dims[2], sm_s1 = dims[2];
+                std::vector<T_data> new_comp(input_size);
+                size_t n_clamped = 0;
+                const double band = smoothness_alpha * 2.0 * eb;
+#pragma omp parallel for collapse(2) num_threads(edt_thread_num) reduction(+:n_clamped)
+                for (int x = 0; x < dims[0]; x++) {
+                for (int y = 0; y < dims[1]; y++) {
+                for (int z = 0; z < dims[2]; z++) {
+                    size_t i = (size_t)x * sm_s0 + y * sm_s1 + z;
+                    double v = (double)dec_data[i] + (double)compensation_map[i];
+                    double v_low = -1e300, v_high = 1e300;
+                    const int ddx[6] = {-1,1,0,0,0,0};
+                    const int ddy[6] = {0,0,-1,1,0,0};
+                    const int ddz[6] = {0,0,0,0,-1,1};
+                    for (int d = 0; d < 6; d++) {
+                        int nx = x + ddx[d], ny = y + ddy[d], nz = z + ddz[d];
+                        if (nx<0||nx>=dims[0]||ny<0||ny>=dims[1]||nz<0||nz>=dims[2]) continue;
+                        size_t nj = (size_t)nx * sm_s0 + ny * sm_s1 + nz;
+                        int dq = (int)quant_index[i] - (int)quant_index[nj];
+                        double v_j = (double)dec_data[nj] + (double)compensation_map[nj];
+                        double center = v_j + 2.0 * (double)dq * eb;
+                        double lo = center - band;
+                        double hi = center + band;
+                        if (lo > v_low)  v_low  = lo;
+                        if (hi < v_high) v_high = hi;
+                    }
+                    if (v_low > v_high) {
+                        // Inconsistent neighbors — fall back to midpoint (rare).
+                        double mid = 0.5 * (v_low + v_high);
+                        v = mid;
+                        n_clamped++;
+                    } else if (v < v_low) {
+                        v = v_low;
+                        n_clamped++;
+                    } else if (v > v_high) {
+                        v = v_high;
+                        n_clamped++;
+                    }
+                    new_comp[i] = (T_data)(v - (double)dec_data[i]);
+                }}}
+                compensation_map = std::move(new_comp);
+                double sm_time = sm_timer.stop();
+                std::cout << "SmoothnessClamp (alpha=" << smoothness_alpha << "): "
+                          << n_clamped << " / " << input_size
+                          << " (" << (100.0 * n_clamped / input_size) << "%) "
+                          << sm_time << "s" << std::endl;
             }
         }
 
@@ -1171,6 +1274,10 @@ class Compensation {
     double geo_scale = 3.0;
     bool use_plateau_attenuation = false;
     double plateau_cutoff = 20.0;  // voxels; full comp when d1+d2 <= cutoff
+    bool use_near_edge_attenuation = false;  // Approach 3: attenuate near-boundary voxels
+    double near_edge_d_min = 2.0;            // voxels; full comp when d1 >= d_min
+    bool use_sign_ratio_attenuation = false; // attenuate when d2/d1 < threshold (sign ambiguity)
+    double sign_ratio_threshold = 1.0;       // full comp when d2/d1 >= threshold
     bool geo_auto = false;        // if true, derive geo_scale from d1 percentile
     double geo_percentile = 80.0; // percentile of d1 used as geo_scale when geo_auto=true
     double geo_scale_min = 1.0;   // floor applied to auto-derived geo_scale (voxels)
@@ -1181,6 +1288,8 @@ class Compensation {
     bool save_distance_maps = false;      // copy d1/d2 into member buffers for --profile_harm
     std::vector<T_data> d_edge_map;       // EDT round-1 distance (d1) when save_distance_maps
     std::vector<T_data> d_neutral_map;    // EDT round-2 distance (d2) when save_distance_maps
+    bool use_smoothness_clamp = false;    // Approach 2: post-comp smoothness clamp
+    double smoothness_alpha = 1.0;        // band width = alpha * 2 * eb; alpha<1 tightens
                                           // 0.10 empirically validated on NYX+Hurricane:
                                           // catches background-dominant fields (Q* mixing ratios)
                                           // while preserving compensation for smooth fields

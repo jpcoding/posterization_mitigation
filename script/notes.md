@@ -82,7 +82,7 @@ for each neighbor j:
         reduce comp[i]
 ```
 
-### Approach 3: Adaptive eb scaling from d_edge
+### Approach 3: Adaptive eb scaling from d_edge — IMPLEMENTED, EMPIRICALLY HARMFUL (2026-05-11)
 Use d_edge (already computed) to derive per-point confidence:
 
 ```
@@ -91,6 +91,48 @@ effective_eb[i] = eb * confidence(i)
 ```
 
 Points near boundaries (small d_edge) get reduced compensation. d_min is tunable (e.g., 2-3 voxels). Large uniform plateaus get full compensation; small fragmented plateaus get reduced.
+
+**Empirical sweep** (NYX velocity_x, rel eb=0.01, ds=2, geo_auto):
+
+| d_min | PSNR (dB) | SSIM | ΔPSNR |
+|---|---|---|---|
+| baseline (off) | 54.109 | 0.859 | — |
+| 1 | 51.603 | 0.743 | −2.5 dB |
+| 2 | 49.729 | 0.662 | −4.4 dB |
+| 3 | 48.629 | 0.602 | −5.5 dB |
+| 5 | 47.416 | 0.514 | −6.7 dB |
+
+**Why it hurts.** Near-boundary voxels have a *low* harm rate (2.6% from profiling). These are the voxels that benefit most from compensation — the sign map is reliable near boundaries because d1 is small and the nearest boundary point is unambiguous. Attenuating them removes the majority of beneficial corrections. Larger d_min makes it worse by expanding the attenuated region.
+
+**Paper framing.** Strong negative result: it demonstrates that the harm comes from deep plateaus (large d1), not from the near-boundary region. This motivates c_geom (which attenuates the opposite end) and rules out the intuitive but wrong "be conservative near boundaries" heuristic. Implementation retained (default off) for the ablation table.
+
+### Approach 2: Neighbor consistency clamping — IMPLEMENTED, EMPIRICALLY NOT USEFUL (2026-05-11)
+Two-pass smoothness clamp. After comp[i] is computed for all voxels, a second pass intersects, for each face neighbor j with Δq = quant[i] − quant[j], the band
+
+```
+v[j] + 2·Δq·eb ± α·2·eb
+```
+
+across the six neighbors and clamps v[i] = dec[i] + comp[i] into the intersection. Setters: `set_smoothness_clamp(bool)`, `set_smoothness_alpha(double)`; CLI flags `--smoothness_clamp`, `--smoothness_alpha`.
+
+**Math result.** Under the canonical bin-center decompressor (`dec[i] = 2·eb·quant[i]`), the worst-case (α=1) per-neighbor band always *contains* the per-voxel bin clamp `[dec[i]−eb, dec[i]+eb]`. The intersection therefore reduces to the bin clamp — the formula in the original Approach 2 is provably redundant with Approach 4 in this setting.
+
+**Empirical sweep** (NYX velocity_x, rel eb=0.01, ds=2, η=0.9):
+
+| α | clamp rate | harm rate | PSNR (dB) | SSIM |
+|---|---|---|---|---|
+| baseline (off) | — | 15.07 % | 54.109 | 0.859 |
+| 1.0 | 11 / 134 M (≈10⁻⁵ %) | 15.07 % | 54.109 | 0.859 |
+| 0.75 | 14 M (10.5 %) | 15.06 % | 53.512 | 0.821 |
+| 0.5 | 18 M (13.6 %) | 14.89 % | 49.951 | 0.670 |
+| 0.25 | 20 M (15.3 %) | **20.83 %** | 48.469 | 0.621 |
+| 0.1 | 30 M (22.4 %) | 20.50 % | 48.464 | 0.621 |
+
+At α=1 the clamp engages on 11 of 134 M voxels (FP edges) and PSNR is unchanged — confirming the redundancy. At α<1 the assumed smoothness forces v[i] toward v[j], but compensation is designed to *re-introduce* the sub-bin gradients quantization removed, so tighter α actively undoes the correction. Harm rate *increases* from 15.07 % → 20.83 % at α=0.25.
+
+**Paper framing.** This is a useful **negative result**: it shows that the naive "neighbor-consistency clamp" reduces to the bin clamp under canonical decompression, and that any smoothness assumption stronger than what's implied by the bins is empirically wrong. The implementation is retained in the codebase (default off) for the ablation table.
+
+---
 
 ### Approach 4: Re-quantization self-validation — DONE (2026-05-11)
 Re-quantize the compensated result and check consistency:
@@ -122,9 +164,80 @@ Within the design regime (η ≤ 1) the clamp rate is essentially zero (the 2-vo
 
 **Paper framing:** the clamp is a **formal-property witness**, not a quality-recovery trick. It promotes an implicit construction-bound into an explicit, runtime-verified one, with measured 0% engagement at the recommended operating point. The published statement is: *"under η ≤ 1, post-compensation values are bin-preserving, and therefore post-compensation error is bounded by 2·eb."* Approach 4 is what lets us state this as a theorem rather than as a property of a particular weight function. (Also: gives a clean fallback if future variants — e.g., RBF or unbounded weights — could otherwise overshoot.)
 
+### c_geom Pareto Analysis — DONE (2026-05-11)
+
+Full comparison: `pareto_results_cgeom_p80f1.csv` (c_geom) vs `pareto_results.csv` (baseline), 312 configs (26 fields × 3 ebs × 4 ds factors). Plots: `script/pareto_plots/cgeom_*.pdf/png`. Plot script: `script/plot_cgeom_comparison.py`.
+
+| Outcome | Count |
+|---|---|
+| Improved (>+0.01 dB) | 142 |
+| Neutral (|Δ|≤0.01 dB) | 161 |
+| Hurt (<−0.01 dB) | 9 |
+
+Mean ΔPSNR: +0.084 dB. Max improvement: +0.720 dB (QSNOWf48.log10, eb=1e-2). Max regression: −0.147 dB (QVAPORf48.bin, eb=1e-3).
+
+**Zero-delta fields** (baryon_density, dark_matter_density, all Q* mixing ratios, CLOUD, PRECIP) are skipped by the sparsity/edge-density guards — c_geom is irrelevant there; their delta is 0 by construction.
+
+**Regression analysis**: the 9 hurt configs cluster on QVAPORf48.bin (eb=1e-3, all ds factors, −0.14 dB) and Pf48.bin (eb=5e-3, −0.06 to −0.10 dB). Both fields have moderate sparsity (above 0.10 threshold) but are actually still near the boundary of the "help" regime — the p80 percentile of d1 leads to a geo_scale that is slightly too aggressive for these fields at small eb. Acceptable regression given the 142 improvements.
+
+**Recommended default**: c_geom on (`--geo_auto 1 --geo_percentile 80 --geo_scale_min 1.0`).
+
 ### Recommended combination for TPDS
 - **Approach 4** as the hard guarantee (zero cost, provably bounded) — **DONE 2026-05-11**
-- **Approach 3** as soft control (uses existing d_edge, improves average quality) — pending
+- **c_geom calibrated (p80 + floor=1.0)** as soft control targeting deep-plateau false corrections — **DONE 2026-05-11**
+- **Approach 2** explored and rejected — **negative result documented above 2026-05-11**
+- **Approach 3** (near-edge attenuation) — explored and rejected — **negative result documented above 2026-05-11** (−2.5 to −6.7 dB; near-boundary region has low harm rate and benefits from compensation)
+
+---
+
+## Remaining False Corrections — Root Causes and Future Directions (2026-05-11)
+
+After all current guards (c_geom, sparsity, edge-density), remaining false corrections come from three modes:
+
+1. **Sign ambiguity** — voxel is equidistant from positive and negative boundaries; EDT breaks the tie arbitrarily.
+2. **Remote sign propagation** — deep-plateau voxels inherit a sign from a faraway boundary that doesn't represent local sub-bin error direction. c_geom attenuates but doesn't eliminate.
+3. **Fragmented plateaus** — interleaved opposite-sign plateaus; IDW mixes sources from different signed regions.
+
+### Candidate fixes (ranked by expected impact / cost)
+
+**A. EDT source sign verification** — zero extra EDT cost, high expected impact.
+In the IDW loop, `indexes1[i]` gives the nearest neutral boundary voxel. If `sign_map[nearest] ≠ sign_map[i]`, the sign propagation from that source is corrupted → zero out the correction. All data already present; no extra passes.
+*First step: check what fraction of harm events have EDT-source sign mismatch using `--profile_harm`.*
+
+**B. Opposite-sign proximity ratio** — one extra EDT pass, targets mode 1 directly.
+Compute distance to nearest *opposite-sign* boundary. If `d_opposite / d1 < 1.5`, sign is ambiguous → attenuate proportionally. Principled fix for equidistance failures.
+
+**C. Wider sign consensus (3×3×3)** — no extra passes, low-medium impact.
+Extend `c_sign` from 6 face-neighbors to 26 neighbors. If majority of differing neighbors imply opposite sign, skip compensation. Targets mode 3.
+
+**D. Per-voxel adaptive η** — unifies existing signals.
+Scale η per-voxel by confidence derived from c_sign + d1. High-certainty voxels get η=1; uncertain get η→0.
+
+### Empirical findings (2026-05-11, velocity_x rel eb=1e-2, ds=2, geo_auto)
+
+**Harm breakdown:**
+- 55% of harm events are wrong-sign (comp pushes away from truth)
+- 45% overshoot (right direction but too far)
+- Oracle PSNR (zero out all wrong-sign): **55.73 dB** vs current **54.11 dB** → 1.62 dB gap
+
+**d2/d1 stratification of wrong-sign harm:**
+```
+d2/d1 < 0.5:   8.1M wrong-sign,  4.1M overshoot, 24.3M benefits  (22% wrong-sign of affected)
+d2/d1 0.5–1.0: 1.6M wrong-sign,  1.9M overshoot, 17.4M benefits  ( 7.8%)
+d2/d1 1.0–2.0: 0.9M wrong-sign,  1.7M overshoot, 18.9M benefits  ( 4%)
+d2/d1 2.0–5.0: 0.4M wrong-sign,  1.4M overshoot, 52.7M benefits  ( 0.6%)
+```
+73% of wrong-sign harm is in d2/d1 < 0.5 (sign is ambiguous — neutral boundary is closer than nearest signed boundary).
+
+**Sign-ratio attenuation tested (`r *= min(1, (d2/d1)/threshold)`):**
+- Reduces harm_rate but hurts PSNR at every threshold (−0.5 dB at threshold=1.0, −1.6 dB at threshold=2.0)
+- Wrong-sign count stays constant (attenuation reduces magnitude but not sign → still harmful)
+- Only overshoot count decreases; killed benefits exceed killed harms at all thresholds
+- Implemented as `--sign_ratio_attenuation`/`--sign_ratio_threshold` in test driver (default off)
+
+**Conclusion:** The 1.62 dB oracle gap is intractable with post-hoc filtering. Wrong-sign and correct corrections are interleaved across all d2/d1 ranges; no threshold separates them without ground truth. Fixing requires better sign propagation — either a fundamentally different assignment algorithm or a learned approach.
+
+**Paper value:** Establishes the current operating point (54.1 dB) and theoretical EDT-sign-propagation ceiling (55.7 dB) on velocity_x. A neural method would be expected to approach the oracle bound. Reinforces "analytical method trades ~1.6 dB for portability and zero training cost."
 
 ---
 

@@ -96,6 +96,30 @@ int main(int argc, char **argv) {
     app.add_option("--profile_harm", profile_harm_prefix,
                    "if set, save sidecar files <prefix>_d_edge.f32, <prefix>_d_neutral.f32, <prefix>_quant.i32, <prefix>_comp.f32 for offline harm analysis")
         ->default_val("");
+    bool smoothness_clamp = false;
+    double smoothness_alpha = 1.0;
+    app.add_option("--smoothness_clamp", smoothness_clamp,
+                   "Approach 2: post-comp pass clamping v[i] toward neighbor-implied smoothness band")
+        ->default_val(false);
+    app.add_option("--smoothness_alpha", smoothness_alpha,
+                   "band-width factor for --smoothness_clamp (band = alpha*2*eb); alpha<1 tightens smoothness")
+        ->default_val(1.0);
+    bool near_edge_attenuation = false;
+    double near_edge_d_min = 2.0;
+    app.add_option("--near_edge_attenuation", near_edge_attenuation,
+                   "Approach 3: attenuate near-boundary voxels (r *= min(1, d1/d_min))")
+        ->default_val(false);
+    app.add_option("--near_edge_d_min", near_edge_d_min,
+                   "d_min in voxels for --near_edge_attenuation (default 2.0)")
+        ->default_val(2.0);
+    bool sign_ratio_attenuation = false;
+    double sign_ratio_threshold = 1.0;
+    app.add_option("--sign_ratio_attenuation", sign_ratio_attenuation,
+                   "attenuate when d2/d1 < threshold: r *= (d2/d1)/threshold (sign ambiguity proxy)")
+        ->default_val(false);
+    app.add_option("--sign_ratio_threshold", sign_ratio_threshold,
+                   "threshold for --sign_ratio_attenuation (default 1.0)")
+        ->default_val(1.0);
     CLI11_PARSE(app, argc, argv);
     std::printf("cpu index mode = %s\n", cpu_index_mode.c_str());
 
@@ -237,6 +261,12 @@ int main(int argc, char **argv) {
         compensator.set_sparsity_threshold(sparsity_threshold);
         compensator.set_requant_clamp(requant_clamp);
         compensator.set_eb(eb);
+        compensator.set_smoothness_clamp(smoothness_clamp);
+        compensator.set_smoothness_alpha(smoothness_alpha);
+        compensator.set_near_edge_attenuation(near_edge_attenuation);
+        compensator.set_near_edge_d_min(near_edge_d_min);
+        compensator.set_sign_ratio_attenuation(sign_ratio_attenuation);
+        compensator.set_sign_ratio_threshold(sign_ratio_threshold);
         if (!profile_harm_prefix.empty()) {
             compensator.set_save_distance_maps(true);
         }
@@ -253,32 +283,52 @@ int main(int argc, char **argv) {
         // --- Harm-rate: per-voxel quality comparison before/after compensation ---
         {
             size_t n_harmed = 0, n_helped = 0, n_neutral = 0;
+            size_t n_harm_wrong_sign = 0;   // comp pushed away from truth (sign error)
+            size_t n_harm_overshoot = 0;    // right sign but |comp| > 2*|err_before|
+            size_t n_harm_zero_err = 0;     // dec was already exact; any comp is harmful
             double sum_harm_delta_sq = 0.0, sum_help_delta_sq = 0.0;
             const double eps = 1e-30;
             for (size_t i = 0; i < data_size; i++) {
-                double orig  = original_data[i];
-                double before_err = std::abs(dec_data[i] - orig);
-                double after_err  = std::abs(dec_data[i] + compensation_map[i] - orig);
-                double delta_sq   = after_err * after_err - before_err * before_err;
-                if (after_err > before_err + eps) {
+                double orig      = original_data[i];
+                double err_before = dec_data[i] - orig;           // signed
+                double comp       = compensation_map[i];
+                double err_after  = err_before + comp;
+                double before_abs = std::abs(err_before);
+                double after_abs  = std::abs(err_after);
+                double delta_sq   = err_after * err_after - err_before * err_before;
+                if (after_abs > before_abs + eps) {
                     n_harmed++;
                     sum_harm_delta_sq += delta_sq;
-                } else if (after_err < before_err - eps) {
+                    if (before_abs < eps) {
+                        n_harm_zero_err++;
+                    } else if (comp * err_before > 0) {
+                        // comp has same sign as err_before → pushes away from truth
+                        n_harm_wrong_sign++;
+                    } else {
+                        // right direction but went too far
+                        n_harm_overshoot++;
+                    }
+                } else if (after_abs < before_abs - eps) {
                     n_helped++;
-                    sum_help_delta_sq -= delta_sq; // positive
+                    sum_help_delta_sq -= delta_sq;
                 } else {
                     n_neutral++;
                 }
             }
-            double harm_rate   = (double)n_harmed / data_size;
+            double harm_rate    = (double)n_harmed / data_size;
             double benefit_rate = (double)n_helped / data_size;
-            // convert mean squared error change to dB: 10*log10(after_mse / before_mse) — reported as avg per harmed voxel
-            double harm_rms_delta  = (n_harmed > 0)  ? std::sqrt(sum_harm_delta_sq  / n_harmed)  : 0.0;
-            double help_rms_delta  = (n_helped > 0)  ? std::sqrt(sum_help_delta_sq  / n_helped)  : 0.0;
+            double harm_rms_delta = (n_harmed > 0) ? std::sqrt(sum_harm_delta_sq / n_harmed) : 0.0;
+            double help_rms_delta = (n_helped > 0) ? std::sqrt(sum_help_delta_sq / n_helped) : 0.0;
             printf("harm_rate = %.6f  (%zu / %zu voxels)\n", harm_rate, n_harmed, data_size);
             printf("benefit_rate = %.6f  (%zu / %zu voxels)\n", benefit_rate, n_helped, data_size);
             printf("harm_rms_err_increase = %.6E\n", harm_rms_delta);
             printf("benefit_rms_err_decrease = %.6E\n", help_rms_delta);
+            if (n_harmed > 0) {
+                printf("harm_breakdown: wrong_sign=%zu (%.1f%%)  overshoot=%zu (%.1f%%)  zero_err=%zu (%.1f%%)\n",
+                    n_harm_wrong_sign, 100.0 * n_harm_wrong_sign / n_harmed,
+                    n_harm_overshoot,  100.0 * n_harm_overshoot  / n_harmed,
+                    n_harm_zero_err,   100.0 * n_harm_zero_err   / n_harmed);
+            }
         }
 
         // writefile("compensation_map.f32", compensation_map.data(), data_size);
@@ -292,6 +342,46 @@ int main(int argc, char **argv) {
             writefile((p + "_comp.f32").c_str(),      compensation_map.data(), data_size);
             writefile((p + "_dec.f32").c_str(),       dec_data.data(),       data_size);
             printf("profile sidecars written with prefix: %s\n", p.c_str());
+
+            // --- Sign-ratio stratification ---
+            // Hypothesis: wrong-sign harm events cluster at low d2/d1 (sign ambiguity).
+            // d2/d1 approximates how confident the sign assignment is:
+            //   small ratio → voxel is close to a sign flip relative to nearest boundary
+            //   large ratio → voxel is deep in its plateau, sign is unambiguous
+            if (!d_edge.empty() && !d_neutral.empty()) {
+                const double bins[] = {0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 1e9};
+                const int nbins = 6;
+                size_t total_harm_ws[nbins]   = {};
+                size_t total_harm_os[nbins]   = {};
+                size_t total_help[nbins]       = {};
+                const double eps = 1e-30;
+                for (size_t i = 0; i < data_size; i++) {
+                    double d1 = d_edge[i];
+                    double d2 = d_neutral[i];
+                    double ratio = (d1 > eps) ? (d2 / d1) : 1e9;
+                    int b = nbins - 1;
+                    for (int k = 0; k < nbins; k++) { if (ratio < bins[k]) { b = k; break; } }
+                    double orig       = original_data[i];
+                    double err_before = dec_data[i] - orig;  // NOTE: dec_data not yet updated here
+                    double comp       = compensation_map[i];
+                    double err_after  = err_before + comp;
+                    if (std::abs(err_after) > std::abs(err_before) + eps) {
+                        if (std::abs(err_before) < eps || comp * err_before > 0) total_harm_ws[b]++;
+                        else total_harm_os[b]++;
+                    } else if (std::abs(err_after) < std::abs(err_before) - eps) {
+                        total_help[b]++;
+                    }
+                }
+                printf("d2/d1 ratio stratification (wrong_sign | overshoot | benefit per bin):\n");
+                double lo = 0;
+                for (int b = 0; b < nbins; b++) {
+                    size_t tot = total_harm_ws[b] + total_harm_os[b] + total_help[b];
+                    double ws_frac = tot > 0 ? 100.0 * total_harm_ws[b] / tot : 0;
+                    printf("  [%.1f, %.1f): harm_ws=%zu  harm_os=%zu  help=%zu  (wrong_sign=%.1f%% of affected)\n",
+                        lo, bins[b], total_harm_ws[b], total_harm_os[b], total_help[b], ws_frac);
+                    lo = bins[b];
+                }
+            }
         }
         // add the compensation map to the dec_data
         #pragma omp parallel for num_threads(num_threads)
