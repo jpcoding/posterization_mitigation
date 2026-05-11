@@ -71,7 +71,11 @@ int main(int argc, char **argv) {
     bool geo_auto = false;
     double geo_percentile = 10.0;
     app.add_option("--geo_auto", geo_auto, "derive geo_scale from d1 percentile, no original data needed")->default_val(false);
-    app.add_option("--geo_percentile", geo_percentile, "percentile of d1 used as geo_scale when --geo_auto=1 (default 10)")->default_val(10.0);
+    app.add_option("--geo_percentile", geo_percentile, "percentile of d1 used as geo_scale when --geo_auto=1 (default 80)")->default_val(80.0);
+    double geo_scale_min = 1.0;
+    app.add_option("--geo_scale_min", geo_scale_min,
+                   "floor for auto-derived geo_scale in voxels (default 1.0; prevents small-eb collapse on dense-boundary fields)")
+        ->default_val(1.0);
     bool plateau_attenuation = false;
     double plateau_cutoff = 20.0;
     app.add_option("--plateau_attenuation", plateau_attenuation,
@@ -84,6 +88,14 @@ int main(int argc, char **argv) {
     double sparsity_threshold = 0.10;
     app.add_option("--sparsity_threshold", sparsity_threshold,
                    "skip compensation if non-mode fraction < this (default 0.10)")->default_val(0.10);
+    bool requant_clamp = false;
+    app.add_option("--requant_clamp", requant_clamp,
+                   "Approach 4: clamp dec_data[i]+comp[i] to the original quant bin [2k-1,2k+1]*eb (hard guarantee)")
+        ->default_val(false);
+    std::string profile_harm_prefix;
+    app.add_option("--profile_harm", profile_harm_prefix,
+                   "if set, save sidecar files <prefix>_d_edge.f32, <prefix>_d_neutral.f32, <prefix>_quant.i32, <prefix>_comp.f32 for offline harm analysis")
+        ->default_val("");
     CLI11_PARSE(app, argc, argv);
     std::printf("cpu index mode = %s\n", cpu_index_mode.c_str());
 
@@ -223,9 +235,15 @@ int main(int argc, char **argv) {
         compensator.set_plateau_cutoff(plateau_cutoff);
         compensator.set_edge_density_threshold(edge_density_threshold);
         compensator.set_sparsity_threshold(sparsity_threshold);
+        compensator.set_requant_clamp(requant_clamp);
+        compensator.set_eb(eb);
+        if (!profile_harm_prefix.empty()) {
+            compensator.set_save_distance_maps(true);
+        }
         if (geo_auto) {
             compensator.set_geo_auto(true);
             compensator.set_geo_percentile(geo_percentile);
+            compensator.set_geo_scale_min(geo_scale_min);
         } else {
             compensator.set_geo_scale(geo_scale);
         }
@@ -264,6 +282,17 @@ int main(int argc, char **argv) {
         }
 
         // writefile("compensation_map.f32", compensation_map.data(), data_size);
+        if (!profile_harm_prefix.empty()) {
+            const auto& d_edge    = compensator.get_d_edge();
+            const auto& d_neutral = compensator.get_d_neutral();
+            std::string p = profile_harm_prefix;
+            writefile((p + "_d_edge.f32").c_str(),    d_edge.data(),         data_size);
+            writefile((p + "_d_neutral.f32").c_str(), d_neutral.data(),      data_size);
+            writefile((p + "_quant.i32").c_str(),     quant_inds.data(),     data_size);
+            writefile((p + "_comp.f32").c_str(),      compensation_map.data(), data_size);
+            writefile((p + "_dec.f32").c_str(),       dec_data.data(),       data_size);
+            printf("profile sidecars written with prefix: %s\n", p.c_str());
+        }
         // add the compensation map to the dec_data
         #pragma omp parallel for num_threads(num_threads)
         for (int i = 0; i < data_size; i++) {

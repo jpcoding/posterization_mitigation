@@ -92,7 +92,7 @@ effective_eb[i] = eb * confidence(i)
 
 Points near boundaries (small d_edge) get reduced compensation. d_min is tunable (e.g., 2-3 voxels). Large uniform plateaus get full compensation; small fragmented plateaus get reduced.
 
-### Approach 4: Re-quantization self-validation
+### Approach 4: Re-quantization self-validation — DONE (2026-05-11)
 Re-quantize the compensated result and check consistency:
 
 ```
@@ -104,9 +104,105 @@ if re_quantized != quant_index[i]:
 
 Zero additional cost, guarantees error bound is never violated.
 
+**Implementation:** `set_requant_clamp(bool)` and `set_eb(double)` on `PM::Compensation`; CLI flag `--requant_clamp` in `test/test_quantize_and_edt.cpp`. Wired in all three compensation paths: downsampled IDW, full-res IDW, RBF. Counts clamp events and reports as percentage of voxels.
+
+**Formal property:** the IDW magnitude `w = d2/(d1+d2)` is strictly bounded in (0,1), and `compensation_value = max_diff · η ≤ eb · η`. So at **η ≤ 1**, `|comp[i]| < eb` already holds by construction, which keeps `dec_data[i]+comp[i]` inside the original quantization bin `[(2k−1)eb, (2k+1)eb]`. The post-compensation error is bounded by the bin width, 2·eb. The clamp turns this **construction property into a machine-checked invariant** — it does not enable operation outside η ≤ 1.
+
+**Validation: NYX 512³ velocity_x, rel eb=0.01, ds=2, 16 threads**
+| η | clamp | PSNR (dB) | SSIM | clamp rate | notes |
+|---|---|---|---|---|---|
+| 0.9 | off | 54.109 | 0.8589 | – | recommended default |
+| 0.9 | on  | 54.109 | 0.8589 | 2 / 134M (≈10⁻⁶ %) | identical to off; FP-edge only |
+| 1.0 | off | 54.031 | 0.8716 | – | design boundary |
+| 1.0 | on  | 54.031 | 0.8716 | 2 / 134M (≈10⁻⁶ %) | identical to off |
+| 1.05 | off | 53.727 | 0.8657 | – | slightly off-spec |
+| 1.05 | on  | 53.729 | 0.8660 | 1.66 M / 134 M (1.2%) | clamp engages on a few percent of voxels |
+
+Within the design regime (η ≤ 1) the clamp rate is essentially zero (the 2-voxel residual is float roundoff on rare configurations where `|comp|` lands within ε of `eb`). The off/on rows are bit-near-identical, confirming the invariant holds by construction.
+
+**Paper framing:** the clamp is a **formal-property witness**, not a quality-recovery trick. It promotes an implicit construction-bound into an explicit, runtime-verified one, with measured 0% engagement at the recommended operating point. The published statement is: *"under η ≤ 1, post-compensation values are bin-preserving, and therefore post-compensation error is bounded by 2·eb."* Approach 4 is what lets us state this as a theorem rather than as a property of a particular weight function. (Also: gives a clean fallback if future variants — e.g., RBF or unbounded weights — could otherwise overshoot.)
+
 ### Recommended combination for TPDS
-- **Approach 4** as the hard guarantee (zero cost, provably bounded)
-- **Approach 3** as soft control (uses existing d_edge, improves average quality)
+- **Approach 4** as the hard guarantee (zero cost, provably bounded) — **DONE 2026-05-11**
+- **Approach 3** as soft control (uses existing d_edge, improves average quality) — pending
+
+---
+
+## Harm Profiling and c_geom Calibration (2026-05-11)
+
+### Profile tooling
+- `test/test_quantize_and_edt.cpp --profile_harm <prefix>` writes per-voxel sidecars: `<p>_d_edge.f32`, `<p>_d_neutral.f32`, `<p>_quant.i32`, `<p>_comp.f32`, `<p>_dec.f32`.
+- `script/profile_harm.py` joins them with the original and reports harm-rate by (d1, IDW magnitude, |comp|, sign-agree, local-roughness) plus a 2-D heatmap.
+- New API: `Compensation::set_save_distance_maps(bool)`, `get_d_edge()`, `get_d_neutral()`. ~256 MB extra peak memory at 512³ float, so opt-in.
+
+### Finding 1 — harm clusters in deep-plateau interior
+NYX velocity_x @ rel eb=0.01, η=0.9, ds=2, all confidence guards off:
+
+| d1 bin | count | harm rate | net Δ(err²) |
+|---|---|---|---|
+| [0, 0.5] | 19 M | 2.6% | −4.9e11 (excellent) |
+| [5, 8] | 26 M | 25% | −4.9e10 (good) |
+| [8, 13] | 12 M | 39% | −1.4e10 (marginal) |
+| [13, 20] | 2.1 M | **50%** | **+1.1e10 (net harmful)** |
+| [20, 35] | 86 K | **53%** | **+1.3e10 (net harmful)** |
+
+The 2-D (d1 × IDW magnitude) heatmap shows the diagonal cleanly: deep-plateau + high-IDW voxels (large d1, IDW ≥ 0.5) are wrong 80–100 % of the time. Sign-agreement was uninformative (it only fires near edges, where harm is rare anyway).
+
+### Finding 2 — the c_geom auto-percentile default was wrong
+The formula is `r *= min(1, geo_scale/d1)`, so **smaller** `geo_scale` means **more** attenuation. The old default `geo_percentile=10` returns `geo_scale = p10(d1)`, which for velocity_x is 0.0074 voxels — kills nearly all compensation:
+
+| auto-percentile | geo_scale (voxels) | harm rate | PSNR (dB) | vs baseline |
+|---|---|---|---|---|
+| p10 (current default) | 0.0074 | 8.3 % | **44.81** | **−9.30** (catastrophic) |
+| p30 | 1.42 | 10.2 % | 51.12 | −2.99 |
+| p50 | 3.00 | 11.9 % | 53.56 | −0.55 |
+| p70 | 4.90 | 13.4 % | 54.21 | +0.10 |
+| **p80** | 6.00 | 14.1 % | **54.24** | **+0.13** |
+| p90 | 8.06 | 14.7 % | 54.20 | +0.09 |
+| p99 | 14.18 | 15.0 % | 54.12 | +0.01 |
+| OFF | — | 15.1 % | 54.11 | baseline |
+
+The right rule is "attenuate only the d1-tail", which requires a **high** percentile (p80 or so), not low. The PSNR peak at p80 corresponds to `geo_scale = 6 ≈` the d1 value at which the per-bin harm/benefit Pareto inverts.
+
+### Finding 3 — the win is modest but real
+At p80, harm rate drops 15.07 % → 14.08 % and PSNR gains +0.13 dB on velocity_x. The gain is bounded because the dominant harmful bins (d1 ≈ 5–13) are still **net beneficial** despite higher per-bin harm rates; c_geom only really removes the d1>13 tail (2 M voxels of 134 M).
+
+### Finding 4 — the auto rule needs a floor to be reliable
+
+A focused factor=2 sweep across NYX (6) + Hurricane (20) × 3 ebs compared three candidate auto rules:
+
+| dataset | config | n | n_better | n_worse | n_disaster | mean ΔPSNR |
+|---|---|---|---|---|---|---|
+| hurricane | p80 (no floor) | 60 | 18 | 11 | **6** | −0.005 |
+| hurricane | **p80 + floor=1.0** | 60 | **27** | **2** | **0** | **+0.111** |
+| hurricane | fixed gs=5 | 60 | 17 | 1 | 0 | +0.085 |
+| nyx | p80 (no floor) | 18 | 8 | 2 | **2** | −0.332 |
+| nyx | **p80 + floor=1.0** | 18 | **10** | **0** | **0** | **+0.078** |
+| nyx | fixed gs=5 | 18 | 7 | 0 | 0 | +0.032 |
+
+The "no floor" disasters all share the same shape: at small eb, every voxel is within <1 voxel of an edge, so even p80 of d1 collapses to ~10⁻³ voxels and `min(1, geo_scale/d1)` kills almost all compensation. A 1-voxel floor on the auto value preserves adaptive behavior on well-behaved fields while preventing the small-eb collapse. Floored p80 dominates fixed gs=5 because at large eb the field-adaptive value is generally better than a hard 5-voxel threshold.
+
+### Finding 5 — full 312-config validation
+
+The same `pareto_sweep.sh` matrix that produced `pareto_results.csv` (baseline, c_geom off) was rerun with `--geo_auto --geo_percentile 80 --geo_scale_min 1.0` and written to `pareto_results_cgeom_p80f1.csv`. Comparison via `script/compare_pareto_full.py`:
+
+| dataset | n configs | n_better | n_worse | n_disaster<−0.1 | mean ΔPSNR | max +ΔPSNR | max −ΔPSNR |
+|---|---|---|---|---|---|---|---|
+| **hurricane** | 240 | **107** | 8 | 5 | **+0.092 dB** | +0.72 | −0.15 |
+| **nyx** | 72 | **39** | 1 | 0 | **+0.057 dB** | +0.23 | −0.01 |
+| **total** | 312 | 146 | 9 | 5 | — | — | — |
+
+47 % of configs improved, 3 % regressed. The five worst cases (QVAPOR @ 1e-3 and Pf48 @ 5e-3 f=0) lose only 0.10–0.15 dB. Big wins (8 configs > +0.5 dB) include Pf48, QSNOWf48.log10, QRAINf48.log10, QVAPORf48 — all at rel eb=1e-2. The gain scales inversely with downsample factor (f=0 mean +0.105 dB; f=8 mean +0.050 dB).
+
+### Code changes applied (2026-05-11)
+- `geo_percentile` default `10 → 80`
+- `geo_scale_min` default `0.0 → 1.0` (new parameter)
+- Docstring at [compensation.hpp:70-91](../include/compensation.hpp#L70-L91) rewritten to describe the formula direction correctly
+- CLI flag `--geo_scale_min` exposed in `test_quantize_and_edt.cpp`
+- `--geo_attenuation` remains **off** by default (backward compatible). The auto-parameter changes only take effect when the user opts in.
+
+### Paper framing
+This is the **harm-rate-targeted** part of the controlled-compensation contribution: a confidence factor that exploits the d1 distribution directly observable from the EDT to reduce false corrections in deep-plateau interiors. Pair with the re-quantization clamp (Approach 4) which gives the hard bin-preserving worst-case bound.
 
 ---
 

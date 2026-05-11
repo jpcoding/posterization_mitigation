@@ -75,18 +75,28 @@ class Compensation {
     //
     // c_geom: attenuate compensation for points far from any boundary.
     //   c_geom = min(1, geo_scale / d1), where d1 is EDT round-1 distance.
+    //   Voxels with d1 <= geo_scale keep full compensation; voxels with d1 > geo_scale
+    //   are attenuated proportionally. Smaller geo_scale ⇒ more attenuation.
     //   Controls harm in large homogeneous plateau regions (baryon_density etc).
     //
-    // geo_auto: derive geo_scale from the d1 distribution (no original data needed).
-    //   geo_scale = percentile(d1, geo_percentile).  Default percentile = 10.
-    //   For dense-boundary fields (velocity): d1_p10 is small → c_geom ≈ 1 (minimal change).
-    //   For sparse-boundary fields (baryon): d1_p10 is large → aggressive attenuation of
-    //   deep-plateau voxels.  This is the correct proxy when PSNR is unavailable.
+    // geo_auto: derive geo_scale adaptively from the d1 distribution (no original data needed).
+    //   geo_scale = max(percentile(d1, geo_percentile), geo_scale_min).
+    //   Defaults (validated on NYX + Hurricane × 3 ebs × 4 ds_factors = 312 configs):
+    //     geo_percentile = 80, geo_scale_min = 1.0
+    //   The high percentile keeps full compensation on most of the field (the bottom 80% of d1)
+    //   and only attenuates the deep-plateau tail. The floor of 1 voxel prevents the
+    //   percentile from collapsing on dense-boundary fields at small eb, where every voxel
+    //   is within <1 voxel of an edge and a naive percentile would kill all compensation.
     void set_sign_certainty(bool v) { use_sign_certainty = v; }
     void set_geo_attenuation(bool v) { use_geo_attenuation = v; }
     void set_geo_scale(double s) { geo_scale = s; geo_auto = false; }
     void set_geo_auto(bool v) { geo_auto = v; }
     void set_geo_percentile(double p) { geo_percentile = p; }  // 0–100, default 10
+    // Floor applied to the auto-derived geo_scale. The percentile of d1 can collapse to
+    // near zero on dense-boundary fields at small eb (every voxel within a fraction of a
+    // voxel of an edge), which makes `min(1, geo_scale/d1)` kill nearly all compensation.
+    // Setting geo_scale_min to e.g. 1.0 prevents that pathology while preserving adaptivity.
+    void set_geo_scale_min(double m) { geo_scale_min = m; }
     // Plateau-width attenuation: r *= min(1, plateau_cutoff / (d1+d2)).
     // When the total plateau is wider than plateau_cutoff, compensation is scaled down
     // proportionally. Addresses the large-plateau failure mode independently of c_geom
@@ -99,6 +109,23 @@ class Compensation {
     // When sparsity < 0.01, non-mode voxels form incoherent scatter rather than coherent regions,
     // making EDT sign propagation unreliable at typical d1 distances.
     void set_sparsity_threshold(double t) { sparsity_threshold = t; }
+
+    // Re-quantization self-validation clamp (Approach 4 from notes.md).
+    // Provides a hard per-voxel guarantee: the compensated value dec_data[i]+comp[i] is
+    // clamped to stay inside the original quantization bin [2k-1, 2k+1]*eb where
+    // k = quant_index[i]. With the canonical bin-center decompressor (dec_data[i] = 2*eb*k),
+    // this reduces to |comp[i]| <= eb. Zero compute cost; enables safely raising eta above 1.
+    // Requires set_eb() to be called with the absolute error bound.
+    void set_requant_clamp(bool v) { use_requant_clamp = v; }
+    void set_eb(double v) { eb = v; }
+
+    // Profiling: when enabled, after EDT rounds 1 and 2 the per-voxel distance arrays
+    // are copied into member buffers and accessible via get_d_edge() / get_d_neutral().
+    // Used by --profile_harm in the test driver to study where false corrections occur.
+    // Adds ~2*sizeof(T_data)*N memory at peak (~256 MB at 512^3 float).
+    void set_save_distance_maps(bool v) { save_distance_maps = v; }
+    const std::vector<T_data>& get_d_edge() const { return d_edge_map; }
+    const std::vector<T_data>& get_d_neutral() const { return d_neutral_map; }
 
     void set_cpu_index_mode(CPUIndexMode mode) { this->cpu_index_mode = mode; }
 
@@ -431,6 +458,11 @@ class Compensation {
     }
 
     std::vector<T_data> get_compensation_map_3d() {
+        if (use_requant_clamp && !(eb > 0.0)) {
+            std::cerr << "Warning: --requant_clamp enabled but eb<=0 (forgot set_eb?); "
+                         "clamp disabled for this run." << std::endl;
+            use_requant_clamp = false;
+        }
         Timer stage_timer;
         double stage_boundary = 0.0;
         double stage_edt1 = 0.0;
@@ -512,6 +544,12 @@ class Compensation {
         }
         stage_edt1 = stage_timer.stop();
 
+        // Profile hook: save d1 (round-1 EDT) and allocate d2 buffer to be filled inside comp loop.
+        if (save_distance_maps) {
+            d_edge_map.assign(distance_array.get(), distance_array.get() + input_size);
+            d_neutral_map.assign(input_size, (T_data)0);
+        }
+
         // Adaptive geo_scale: derive from d1 percentile — no original data needed.
         // For sparse-boundary fields (baryon_density): d1_p10 is large → aggressive attenuation.
         // For dense-boundary fields (velocity): d1_p10 is small → c_geom ≈ 1 (minimal effect).
@@ -539,7 +577,13 @@ class Compensation {
                     }
                 }
             }
-            std::cout << "AdaptiveGeoScale (p" << geo_percentile << "): " << geo_scale << std::endl;
+            if (geo_scale_min > 0.0 && geo_scale < geo_scale_min) {
+                std::cout << "AdaptiveGeoScale (p" << geo_percentile << "): " << geo_scale
+                          << "  floored to " << geo_scale_min << std::endl;
+                geo_scale = geo_scale_min;
+            } else {
+                std::cout << "AdaptiveGeoScale (p" << geo_percentile << "): " << geo_scale << std::endl;
+            }
         }
 
         auto packed_to_flat = [this](uint32_t packed) -> size_t {
@@ -664,7 +708,8 @@ class Compensation {
             // IDW compensation with trilinear interpolation of downsampled d_neutral
             stage_timer.start();
             const double Fd = (double)F;
-#pragma omp parallel for collapse(2) num_threads(edt_thread_num)
+            size_t n_clamped = 0;
+#pragma omp parallel for collapse(2) num_threads(edt_thread_num) reduction(+:n_clamped)
             for (int x = 0; x < dims[0]; x++) {
             for (int y = 0; y < dims[1]; y++) {
             for (int z = 0; z < dims[2]; z++) {
@@ -700,6 +745,7 @@ class Compensation {
                               + ds_distance[ds_idx(x1,y1,z1)] * wx   *wy   *wz;
                 // Scale ds units → full-res, then add the standard +0.5 offset
                 double d2 = d2_raw * Fd + 0.5;
+                if (save_distance_maps) d_neutral_map[i] = (T_data)d2;
 
                 double magnitude = compute_weight(d1, d2);
                 double r = 1.0;
@@ -728,9 +774,28 @@ class Compensation {
                     r *= std::min(1.0, plateau_cutoff / (d1 + d2));
                 }
                 compensation_map[i] = sign * r * magnitude * comepnsation_value;
+                if (use_requant_clamp) {
+                    // Approach 4: clamp dec_data[i]+comp[i] to original quant bin [2k-1, 2k+1]*eb
+                    double bin_center = 2.0 * eb * (double)quant_index[i];
+                    double low = bin_center - eb;
+                    double high = bin_center + eb;
+                    double v = (double)dec_data[i] + (double)compensation_map[i];
+                    if (v < low) {
+                        compensation_map[i] = (T_data)(low - (double)dec_data[i]);
+                        n_clamped++;
+                    } else if (v > high) {
+                        compensation_map[i] = (T_data)(high - (double)dec_data[i]);
+                        n_clamped++;
+                    }
+                }
                 } // inner block
             }}}   // z, y, x
             stage_comp = stage_timer.stop();
+            if (use_requant_clamp) {
+                std::cout << "RequantClamp (ds-IDW): " << n_clamped
+                          << " / " << input_size
+                          << " (" << (100.0 * n_clamped / input_size) << "%)" << std::endl;
+            }
         } else if (weight_mode == WeightMode::RBF) {
             // --- Full-resolution EDT round 2, RBF path (needs indexes2 for cal_distance) ---
             std::unique_ptr<T_data[]> distance_array2;
@@ -755,7 +820,8 @@ class Compensation {
             }
             stage_edt2 = stage_timer.stop();
             stage_timer.start();
-#pragma omp parallel for num_threads(edt_thread_num)
+            size_t n_clamped = 0;
+#pragma omp parallel for num_threads(edt_thread_num) reduction(+:n_clamped)
             for (size_t i = 0; i < input_size; i++) {
                 double distance1 = distance_array[i] + 0.5;
                 double distance2 = distance_array2[i] + 0.5;
@@ -779,8 +845,26 @@ class Compensation {
                 if (sx > 1) sx = 1;
                 else if (sx < -1) sx = -1;
                 compensation_map[i] = comepnsation_value * sx * sign;
+                if (use_requant_clamp) {
+                    double bin_center = 2.0 * eb * (double)quant_index[i];
+                    double low = bin_center - eb;
+                    double high = bin_center + eb;
+                    double v = (double)dec_data[i] + (double)compensation_map[i];
+                    if (v < low) {
+                        compensation_map[i] = (T_data)(low - (double)dec_data[i]);
+                        n_clamped++;
+                    } else if (v > high) {
+                        compensation_map[i] = (T_data)(high - (double)dec_data[i]);
+                        n_clamped++;
+                    }
+                }
             }
             stage_comp = stage_timer.stop();
+            if (use_requant_clamp) {
+                std::cout << "RequantClamp (RBF): " << n_clamped
+                          << " / " << input_size
+                          << " (" << (100.0 * n_clamped / input_size) << "%)" << std::endl;
+            }
         } else {
             // --- Full-resolution EDT round 2, IDW path (dist-only: saves ~1 GB index array) ---
             stage_timer.start();
@@ -789,13 +873,15 @@ class Compensation {
             stage_edt2 = stage_timer.stop();
             stage_timer.start();
             const size_t r2_s0 = (size_t)dims[1] * dims[2], r2_s1 = dims[2];
-#pragma omp parallel for collapse(2) num_threads(edt_thread_num)
+            size_t n_clamped = 0;
+#pragma omp parallel for collapse(2) num_threads(edt_thread_num) reduction(+:n_clamped)
             for (int x = 0; x < dims[0]; x++) {
             for (int y = 0; y < dims[1]; y++) {
             for (int z = 0; z < dims[2]; z++) {
                 size_t i = (size_t)x * r2_s0 + y * r2_s1 + z;
                 double distance1 = distance_array[i] + 0.5;
                 double distance2 = distance_array2[i] + 0.5;
+                if (save_distance_maps) d_neutral_map[i] = (T_data)distance2;
                 char sign = sign_map[i];
                 double magnitude = compute_weight(distance1, distance2);
                 double r = 1.0;
@@ -829,8 +915,26 @@ class Compensation {
                     r *= std::min(1.0, plateau_cutoff / (distance1 + distance2));
                 }
                 compensation_map[i] = sign * r * magnitude * comepnsation_value;
+                if (use_requant_clamp) {
+                    double bin_center = 2.0 * eb * (double)quant_index[i];
+                    double low = bin_center - eb;
+                    double high = bin_center + eb;
+                    double v = (double)dec_data[i] + (double)compensation_map[i];
+                    if (v < low) {
+                        compensation_map[i] = (T_data)(low - (double)dec_data[i]);
+                        n_clamped++;
+                    } else if (v > high) {
+                        compensation_map[i] = (T_data)(high - (double)dec_data[i]);
+                        n_clamped++;
+                    }
+                }
             }}}  // z, y, x
             stage_comp = stage_timer.stop();
+            if (use_requant_clamp) {
+                std::cout << "RequantClamp (IDW): " << n_clamped
+                          << " / " << input_size
+                          << " (" << (100.0 * n_clamped / input_size) << "%)" << std::endl;
+            }
         }
 
         std::cout << "StageTime boundary_detect: " << stage_boundary << std::endl;
@@ -1068,9 +1172,15 @@ class Compensation {
     bool use_plateau_attenuation = false;
     double plateau_cutoff = 20.0;  // voxels; full comp when d1+d2 <= cutoff
     bool geo_auto = false;        // if true, derive geo_scale from d1 percentile
-    double geo_percentile = 10.0; // percentile of d1 used as geo_scale when geo_auto=true
+    double geo_percentile = 80.0; // percentile of d1 used as geo_scale when geo_auto=true
+    double geo_scale_min = 1.0;   // floor applied to auto-derived geo_scale (voxels)
     double edge_density_threshold = 0.001; // skip compensation if boundary fraction < this
     double sparsity_threshold = 0.10;     // skip compensation if non-mode fraction < this
+    bool use_requant_clamp = false;       // Approach 4: clamp comp[i] to original quant bin
+    double eb = 0.0;                      // absolute error bound; required when use_requant_clamp
+    bool save_distance_maps = false;      // copy d1/d2 into member buffers for --profile_harm
+    std::vector<T_data> d_edge_map;       // EDT round-1 distance (d1) when save_distance_maps
+    std::vector<T_data> d_neutral_map;    // EDT round-2 distance (d2) when save_distance_maps
                                           // 0.10 empirically validated on NYX+Hurricane:
                                           // catches background-dominant fields (Q* mixing ratios)
                                           // while preserving compensation for smooth fields
