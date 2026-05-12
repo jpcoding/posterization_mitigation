@@ -220,4 +220,66 @@ void __global__ fill_sign_and_neutral_boundary_fused(
 // Kept separate because step 1 (sign propagation) must complete for ALL voxels
 // before we can detect boundaries in the sign_map.
 
+// ── edt_method=4 helpers ────────────────────────────────────────────────────
+
+// Downsample fine boundary+sign to coarse 2× grid (logical-OR boundary,
+// first nonzero sign wins).
+__global__ void downsample_boundary_with_sign_2x(
+    const char* fine_boundary, const char* fine_sign,
+    char* coarse_boundary, char* coarse_sign,
+    int fw, int fh, int fd, int cw, int ch, int cd)
+{
+    int cx = blockIdx.x*blockDim.x + threadIdx.x;
+    int cy = blockIdx.y*blockDim.y + threadIdx.y;
+    int cz = blockIdx.z*blockDim.z + threadIdx.z;
+    if (cx >= cw || cy >= ch || cz >= cd) return;
+    size_t cidx = (size_t)cx + (size_t)cy*cw + (size_t)cz*cw*ch;
+    char b = 0, s = 0;
+    for (int dz = 0; dz < 2; dz++)
+    for (int dy = 0; dy < 2; dy++)
+    for (int dx = 0; dx < 2; dx++) {
+        int fx=2*cx+dx, fy=2*cy+dy, fz=2*cz+dz;
+        if (fx>=fw || fy>=fh || fz>=fd) continue;
+        size_t fi = (size_t)fx + (size_t)fy*fw + (size_t)fz*fw*fh;
+        if (fine_boundary[fi]) { b=1; if (!s) s=fine_sign[fi]; }
+    }
+    coarse_boundary[cidx] = b;
+    coarse_sign[cidx]     = s;
+}
+
+// Fill sign on coarse grid using coarse PBA+ packed index.
+__global__ void fill_sign_coarse(
+    char* coarse_sign, const unsigned int* coarse_packed,
+    int cw, int ch, int cd)
+{
+    int cx = blockIdx.x*blockDim.x + threadIdx.x;
+    int cy = blockIdx.y*blockDim.y + threadIdx.y;
+    int cz = blockIdx.z*blockDim.z + threadIdx.z;
+    if (cx >= cw || cy >= ch || cz >= cd) return;
+    size_t cidx = (size_t)cx + (size_t)cy*cw + (size_t)cz*cw*ch;
+    if (coarse_sign[cidx] != 0) return;
+    unsigned int packed = coarse_packed[cidx];
+    if (packed == 0xFFFFFFFFu) return;
+    int ex =  packed        & 0x3FF;
+    int ey = (packed >> 10) & 0x3FF;
+    int ez = (packed >> 20) & 0x3FF;
+    coarse_sign[cidx] = coarse_sign[(size_t)ex + (size_t)ey*cw + (size_t)ez*cw*ch];
+}
+
+// Upsample coarse sign map to fine grid (nearest-neighbor, factor 2).
+// Preserves existing nonzero fine signs (boundary voxels already have correct signs).
+__global__ void upsample_sign_2x(
+    const char* coarse_sign, char* fine_sign,
+    int fw, int fh, int fd, int cw, int ch, int cd)
+{
+    int fx = blockIdx.x*blockDim.x + threadIdx.x;
+    int fy = blockIdx.y*blockDim.y + threadIdx.y;
+    int fz = blockIdx.z*blockDim.z + threadIdx.z;
+    if (fx >= fw || fy >= fh || fz >= fd) return;
+    size_t fidx = (size_t)fx+(size_t)fy*fw+(size_t)fz*fw*fh;
+    if (fine_sign[fidx] != 0) return;  // preserve fine boundary signs
+    int cx=min(fx/2,cw-1), cy=min(fy/2,ch-1), cz=min(fz/2,cd-1);
+    fine_sign[fidx] = coarse_sign[(size_t)cx+(size_t)cy*cw+(size_t)cz*cw*ch];
+}
+
 #endif

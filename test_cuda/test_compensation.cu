@@ -142,10 +142,13 @@ void run_cuda(
     check_cuda(cudaMalloc(&d_quantized_data, size*sizeof(float)), "malloc quantized_data");
     check_cuda(cudaMalloc(&d_boundary, size*sizeof(char)), "malloc boundary");
     check_cuda(cudaMalloc(&d_boundary_neutral, size*sizeof(char)), "malloc boundary_neutral");
-    check_cuda(cudaMalloc(&distance_edge, size*sizeof(float)), "malloc distance_edge");
-    check_cuda(cudaMalloc(&index_edge, size*sizeof(int)*3), "malloc index_edge");
-    check_cuda(cudaMalloc(&distance_neutral, size*sizeof(float)), "malloc distance_neutral");
-    check_cuda(cudaMalloc(&index_neutral, size*sizeof(int)*3), "malloc index_neutral");
+    // method=4 uses only coarse buffers allocated inside its own block — skip fine-grid allocs
+    if (edt_method != 4) {
+        check_cuda(cudaMalloc(&distance_edge,   size*sizeof(float)),     "malloc distance_edge");
+        check_cuda(cudaMalloc(&index_edge,      size*sizeof(int)*3),     "malloc index_edge");
+        check_cuda(cudaMalloc(&distance_neutral,size*sizeof(float)),     "malloc distance_neutral");
+        check_cuda(cudaMalloc(&index_neutral,   size*sizeof(int)*3),     "malloc index_neutral");
+    }
     check_cuda(cudaMalloc(&d_sign_map, size*sizeof(char)), "malloc sign_map");
 
     // copy the data to the device
@@ -161,13 +164,141 @@ void run_cuda(
     double stage_comp = 0.0;
     auto stage_start = std::chrono::high_resolution_clock::now();
 
-    // Pre-allocate PBA+ ping-pong buffers (reused for both EDT rounds)
+    // Pre-allocate PBA+ ping-pong buffers (reused for both EDT rounds).
+    // Method 4 allocates its own coarse-sized buffers inside its block.
     int* pba_buf0 = nullptr;
     int* pba_buf1 = nullptr;
     if (edt_method == 2 || edt_method == 3) {
         size_t pba_sz = pba_buffer_size(width, height, depth);
         check_cuda(cudaMalloc(&pba_buf0, pba_sz), "malloc pba_buf0");
         check_cuda(cudaMalloc(&pba_buf1, pba_sz), "malloc pba_buf1");
+    }
+
+    // === Method 4: both EDT rounds downsampled to 256³ ===
+    // Eliminates fine-grid PBA+ (50ms) and 2 GB of fine-grid index/distance buffers.
+    if (edt_method == 4) {
+        int ds_w, ds_h, ds_d;
+        pba_downsample_dims(width, height, depth, ds_w, ds_h, ds_d);
+        size_t ds_size = (size_t)ds_w * ds_h * ds_d;
+
+        size_t pba_sz_coarse = pba_buffer_size((uint)ds_w, (uint)ds_h, (uint)ds_d);
+        check_cuda(cudaMalloc(&pba_buf0, pba_sz_coarse), "malloc pba_buf0_coarse");
+        check_cuda(cudaMalloc(&pba_buf1, pba_sz_coarse), "malloc pba_buf1_coarse");
+
+        char*         d_coarse_boundary = nullptr;
+        char*         d_coarse_sign     = nullptr;
+        float*        d_coarse_d1       = nullptr;
+        unsigned int* d_coarse_packed   = nullptr;
+        check_cuda(cudaMalloc(&d_coarse_boundary, ds_size),                       "coarse_boundary");
+        check_cuda(cudaMalloc(&d_coarse_sign,     ds_size),                       "coarse_sign");
+        check_cuda(cudaMalloc(&d_coarse_d1,       ds_size * sizeof(float)),       "coarse_d1");
+        check_cuda(cudaMalloc(&d_coarse_packed,   ds_size * sizeof(unsigned int)),"coarse_packed");
+
+        // Step 1: fine boundary detection + sign map (boundary voxels only)
+        stage_start = std::chrono::high_resolution_clock::now();
+        {
+            dim3 block(8,8,8);
+            dim3 grid((width+7)/8,(height+7)/8,(depth+7)/8);
+            get_boundary_and_sign_map<int><<<grid,block>>>(
+                d_quant_inds, d_boundary, d_sign_map, (char)1, 3, width, height, depth);
+            cudaDeviceSynchronize();
+        }
+        stage_boundary = std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - stage_start).count();
+
+        // Step 2+3: downsample boundary+sign then coarse PBA+ (EDT round 1)
+        stage_start = std::chrono::high_resolution_clock::now();
+        {
+            dim3 block(8,8,8);
+            dim3 grid((ds_w+7)/8,(ds_h+7)/8,(ds_d+7)/8);
+            downsample_boundary_with_sign_2x<<<grid,block>>>(
+                d_boundary, d_sign_map, d_coarse_boundary, d_coarse_sign,
+                (int)width, (int)height, (int)depth, ds_w, ds_h, ds_d);
+            cudaDeviceSynchronize();
+        }
+        edt_3d_pba_downsampled(d_coarse_boundary, d_coarse_d1,
+                               (uint)ds_w, (uint)ds_h, (uint)ds_d,
+                               pba_buf0, pba_buf1, d_coarse_packed);
+        cudaDeviceSynchronize();
+        stage_edt1 = std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - stage_start).count();
+
+        // Step 4+5: fill sign on coarse grid, upsample to fine
+        stage_start = std::chrono::high_resolution_clock::now();
+        {
+            dim3 block(8,8,8);
+            dim3 grid((ds_w+7)/8,(ds_h+7)/8,(ds_d+7)/8);
+            fill_sign_coarse<<<grid,block>>>(d_coarse_sign, d_coarse_packed, ds_w, ds_h, ds_d);
+            cudaDeviceSynchronize();
+        }
+        cudaFree(d_coarse_packed);
+        cudaFree(d_coarse_boundary);
+        {
+            dim3 block(8,8,8);
+            dim3 grid((width+7)/8,(height+7)/8,(depth+7)/8);
+            upsample_sign_2x<<<grid,block>>>(
+                d_coarse_sign, d_sign_map,
+                (int)width, (int)height, (int)depth, ds_w, ds_h, ds_d);
+            cudaDeviceSynchronize();
+        }
+        stage_fill_sign = std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - stage_start).count();
+
+        // Step 6: neutral boundary on fine sign map
+        stage_start = std::chrono::high_resolution_clock::now();
+        {
+            dim3 block(8,8,8);
+            dim3 grid((width+7)/8,(height+7)/8,(depth+7)/8);
+            get_filtered_boundary<char,char><<<grid,block>>>(
+                d_sign_map, d_boundary, d_boundary_neutral, (char)1, width, height, depth);
+            cudaDeviceSynchronize();
+        }
+        stage_neutral_boundary = std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - stage_start).count();
+
+        // Step 7: EDT round 2 downsampled (same as method=3)
+        stage_start = std::chrono::high_resolution_clock::now();
+        float* d_coarse_d2 = nullptr;
+        check_cuda(cudaMalloc(&d_coarse_d2, ds_size * sizeof(float)), "coarse_d2");
+        edt_3d_pba_downsampled(d_boundary_neutral, d_coarse_d2,
+                               width, height, depth, pba_buf0, pba_buf1);
+        cudaDeviceSynchronize();
+        stage_edt2 = std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - stage_start).count();
+
+        // Step 8: compensation — trilinear interp for both d1 and d2
+        stage_start = std::chrono::high_resolution_clock::now();
+        {
+            dim3 block(8,8,8);
+            dim3 grid((width+7)/8,(height+7)/8,(depth+7)/8);
+            compensation_idw_both_downsample<<<grid,block>>>(
+                d_coarse_d1, d_coarse_d2, ds_w, ds_h, ds_d,
+                d_sign_map, d_quantized_data, (float)magnitude,
+                (int)width, (int)height, (int)depth);
+            cudaDeviceSynchronize();
+        }
+        stage_comp = std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - stage_start).count();
+
+        cudaFree(d_coarse_d1); cudaFree(d_coarse_d2); cudaFree(d_coarse_sign);
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = end - start;
+        printf("Elapsed time: %f\n", diff.count());
+        printf("StageTime boundary_detect: %f\n", stage_boundary);
+        printf("StageTime edt_round1: %f\n", stage_edt1);
+        printf("StageTime fill_sign: %f\n", stage_fill_sign);
+        printf("StageTime neutral_boundary: %f\n", stage_neutral_boundary);
+        printf("StageTime edt_round2: %f\n", stage_edt2);
+        printf("StageTime compensation: %f\n", stage_comp);
+        printf("StageTime edt_total: %f\n", stage_edt1 + stage_edt2);
+
+        cudaFree(pba_buf0); cudaFree(pba_buf1);
+        cudaMemcpy(quantized_data, d_quantized_data, size*sizeof(float), cudaMemcpyDeviceToHost);
+        cudaFree(d_quant_inds); cudaFree(d_quantized_data);
+        cudaFree(d_boundary); cudaFree(d_boundary_neutral);
+        cudaFree(d_sign_map);
+        return;
     }
 
     // === Optimized path (edt_method == 3) ===
@@ -444,7 +575,7 @@ int main(int argc, char** argv)
     if (argc < 7) {
         printf("Usage: %s <input_file> <rel_eb> <use_chunk> <dim0_fast> <dim1> <dim2_slow> [edt_method] [jfa_level]\n", argv[0]);
         printf("Example: %s Uf48.bin.f32 0.01 1 500 500 100 3\n", argv[0]);
-        printf("edt_method: 0=chunk(default), 1=JFA, 2=PBA+, 3=PBA+ optimized\n");
+        printf("edt_method: 0=chunk(default), 1=JFA, 2=PBA+, 3=PBA+ optimized, 4=both-downsampled\n");
         return 0;
     }
     std::filesystem::path p{argv[1]} ;

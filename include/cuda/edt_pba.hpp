@@ -626,10 +626,12 @@ __global__ void pba_downsample_boundary_2x(
 // Downsampled PBA EDT: runs PBA on a 2x2x2-downsampled boundary volume.
 // Outputs float distance in downsampled coordinates.
 // Caller provides pre-allocated PBA buffers (must be sized for the downsampled volume).
+// d_ds_packed_out: if non-null, receives coarse packed nearest-neighbor index (caller owns memory).
 void edt_3d_pba_downsampled(
     char* d_boundary_full, float* d_ds_distance,
     uint width, uint height, uint depth,
-    int* d_buf0, int* d_buf1)
+    int* d_buf0, int* d_buf1,
+    unsigned int* d_ds_packed_out = nullptr)
 {
     int ds_w = ((int)width  + 1) / 2;
     int ds_h = ((int)height + 1) / 2;
@@ -715,18 +717,17 @@ void edt_3d_pba_downsampled(
         pba_kernelColorAxis<<<grid, block>>>(d_buf[1 - cur], d_buf[cur], xy_size, z_size);
     }
 
-    // Extract: we only need distance (no packed index needed for round 2 in optimized path).
-    // Reuse pba_extract_result with a throwaway index buffer — or write distance-only extract.
-    // For simplicity, allocate a small temp for packed index (ds volume is 1/8 size).
-    unsigned int* d_ds_packed = nullptr;
-    cudaMalloc(&d_ds_packed, ds_size * sizeof(unsigned int));
+    // Extract distance (and optionally the packed nearest-neighbor index).
+    unsigned int* d_ds_packed = d_ds_packed_out;
+    bool own_packed = (d_ds_packed_out == nullptr);
+    if (own_packed) cudaMalloc(&d_ds_packed, ds_size * sizeof(unsigned int));
     {
         dim3 block(64, 4, 2);
         dim3 grid((ds_w + 63) / 64, (ds_h + 3) / 4, (ds_d + 1) / 2);
         pba_extract_result<<<grid, block>>>(d_buf[cur], d_ds_packed, d_ds_distance,
             (uint)ds_w, (uint)ds_h, (uint)ds_d, xy_size, z_size, z_axis);
     }
-    cudaFree(d_ds_packed);
+    if (own_packed) cudaFree(d_ds_packed);
     cudaFree(d_ds_boundary);
     if (own_bufs) {
         cudaFree(d_buf[0]);

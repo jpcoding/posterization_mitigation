@@ -296,4 +296,43 @@ __global__ void compensation_idw_downsample(
   quantized_data[idx] += val;
 }
 
+// edt_method=4: both d1 and d2 come from downsampled grids — trilinear interp for both.
+__global__ void compensation_idw_both_downsample(
+    const float* ds_d1, const float* ds_d2,
+    int ds_w, int ds_h, int ds_d,
+    char* sign_map, float* quantized_data, float magnitude,
+    int width, int height, int depth)
+{
+  int x = blockIdx.x*blockDim.x + threadIdx.x;
+  int y = blockIdx.y*blockDim.y + threadIdx.y;
+  int z = blockIdx.z*blockDim.z + threadIdx.z;
+  if (x >= width || y >= height || z >= depth) return;
+  size_t idx = (size_t)x + (size_t)y*width + (size_t)z*width*height;
+  char sign = sign_map[idx];
+  if (sign == 0) return;
+
+  // Trilinear interpolation helper — same formula used for d2 in compensation_idw_downsample
+  auto interp = [&](const float* arr) -> float {
+    float fx = (x + 0.5f)*0.5f - 0.5f;
+    float fy = (y + 0.5f)*0.5f - 0.5f;
+    float fz = (z + 0.5f)*0.5f - 0.5f;
+    int x0=(int)floorf(fx), y0=(int)floorf(fy), z0=(int)floorf(fz);
+    float wx=fx-x0, wy=fy-y0, wz=fz-z0;
+    int x1=min(x0+1,ds_w-1); x0=max(x0,0);
+    int y1=min(y0+1,ds_h-1); y0=max(y0,0);
+    int z1=min(z0+1,ds_d-1); z0=max(z0,0);
+    #define DS(a,b,c) arr[(size_t)(a)+(size_t)(b)*ds_w+(size_t)(c)*ds_w*ds_h]
+    float v = DS(x0,y0,z0)*(1-wx)*(1-wy)*(1-wz) + DS(x1,y0,z0)*wx*(1-wy)*(1-wz)
+            + DS(x0,y1,z0)*(1-wx)*wy*(1-wz)     + DS(x1,y1,z0)*wx*wy*(1-wz)
+            + DS(x0,y0,z1)*(1-wx)*(1-wy)*wz     + DS(x1,y0,z1)*wx*(1-wy)*wz
+            + DS(x0,y1,z1)*(1-wx)*wy*wz         + DS(x1,y1,z1)*wx*wy*wz;
+    #undef DS
+    return v * 2.0f + 0.5f;  // scale coarse coords → fine, add voxel-center offset
+  };
+
+  float d1 = interp(ds_d1);
+  float d2 = interp(ds_d2);
+  quantized_data[idx] += sign * (d2/(d1+d2)) * magnitude;
+}
+
 #endif
