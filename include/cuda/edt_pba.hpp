@@ -261,7 +261,7 @@ __global__ void pba_extract_result(
 
     if (PBA_NOTSITE(voronoi) || voronoi == PBA_MARKER) {
         d_packed_index[oidx] = PBA_JFA_INVALID;
-        d_distance[oidx] = 0.0f;
+        if (d_distance) d_distance[oidx] = 0.0f;
         return;
     }
 
@@ -277,10 +277,12 @@ __global__ void pba_extract_result(
     // JFA-compatible packed: (z<<20)|(y<<10)|x
     d_packed_index[oidx] = ((unsigned int)soz << 20) | ((unsigned int)soy << 10) | (unsigned int)sox;
 
-    float dx = (float)(sox - (int)ox);
-    float dy = (float)(soy - (int)oy);
-    float dz = (float)(soz - (int)oz);
-    d_distance[oidx] = sqrtf(dx*dx + dy*dy + dz*dz);
+    if (d_distance) {
+        float dx = (float)(sox - (int)ox);
+        float dy = (float)(soy - (int)oy);
+        float dz = (float)(soz - (int)oz);
+        d_distance[oidx] = sqrtf(dx*dx + dy*dy + dz*dz);
+    }
 }
 
 // ============================================================================

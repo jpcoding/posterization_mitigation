@@ -143,8 +143,15 @@ void run_cuda(
     check_cuda(cudaMalloc(&d_boundary, size*sizeof(char)), "malloc boundary");
     check_cuda(cudaMalloc(&d_boundary_neutral, size*sizeof(char)), "malloc boundary_neutral");
     // method=4 uses only coarse buffers allocated inside its own block — skip fine-grid allocs
+    distance_edge = nullptr;
+    distance_neutral = nullptr;
+    index_edge = nullptr;
+    index_neutral = nullptr;
     if (edt_method != 4) {
-        check_cuda(cudaMalloc(&distance_edge,   size*sizeof(float)),     "malloc distance_edge");
+        // A1: method=3 ignores fine R1 distance_edge — pba_extract_result handles nullptr by skipping the float write.
+        if (edt_method != 3) {
+            check_cuda(cudaMalloc(&distance_edge, size*sizeof(float)), "malloc distance_edge");
+        }
         check_cuda(cudaMalloc(&index_edge,      size*sizeof(int)*3),     "malloc index_edge");
         check_cuda(cudaMalloc(&distance_neutral,size*sizeof(float)),     "malloc distance_neutral");
         check_cuda(cudaMalloc(&index_neutral,   size*sizeof(int)*3),     "malloc index_neutral");
